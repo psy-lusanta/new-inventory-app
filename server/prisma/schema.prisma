@@ -1,0 +1,107 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  admin
+  staff
+  viewer
+}
+
+enum FieldType {
+  text
+  number
+  date
+  boolean
+}
+
+enum MovementType {
+  restock
+  deduction
+  adjustment
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(viewer)
+  createdAt DateTime @default(now())
+
+  // Relations
+  inventoryTables InventoryTable[]
+  inventoryRows   InventoryRow[]
+  stockMovements  StockMovement[]
+}
+
+model InventoryTable {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  // Relations
+  createdBy   String
+  user        User              @relation(fields: [createdBy], references: [id])
+  fields      FieldDefinition[]
+  rows        InventoryRow[]
+  movements   StockMovement[]
+}
+
+model FieldDefinition {
+  id                String    @id @default(uuid())
+  fieldName         String
+  fieldType         FieldType
+  required          Boolean   @default(false)
+  isStockField      Boolean   @default(false)
+  lowStockThreshold Float?
+  order             Int       @default(0)
+
+  // Relations
+  tableId           String
+  table             InventoryTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, fieldName])
+}
+
+model InventoryRow {
+  id        String   @id @default(uuid())
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String? 
+
+  tableId   String
+  table     InventoryTable  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  createdBy String
+  user      User            @relation(fields: [createdBy], references: [id])
+  movements StockMovement[]
+}
+
+model StockMovement {
+  id        String       @id @default(uuid())
+  fieldName String
+  type      MovementType
+  delta     Float
+  note      String?
+  createdAt DateTime     @default(now())
+
+  // Relations
+  tableId   String
+  table     InventoryTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  rowId     String
+  row       InventoryRow   @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  createdBy String
+  user      User           @relation(fields: [createdBy], references: [id])
+}
