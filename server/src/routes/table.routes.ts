@@ -1,31 +1,22 @@
 import { Router } from 'express'
 import {
-  getTables,
-  getTable,
-  createTable,
-  updateTable,
-  deleteTable,
-  addField,
-  updateField,
-  deleteField,
+  getTables, getTable, createTable, updateTable,
+  deleteTable, addField, updateField, deleteField,
 } from '../controllers/table.controller'
-import { authenticate, requireAdmin, requireStaffOrAdmin } from '../middleware/auth.middleware'
+import { authenticate, requireAdmin } from '../middleware/auth.middleware'
+import { validate } from '../lib/validate'
+import { createTableSchema } from '../lib/schemas'
 
 const router = Router()
-
-// All routes require authentication
 router.use(authenticate)
 
-// ─── Table Routes ─────────────────────────────────────────────────────────────
-router.get('/', getTables)                          // all roles
-router.get('/:id', getTable)                        // all roles
-router.post('/', requireAdmin, createTable)         // admin only
-router.put('/:id', requireAdmin, updateTable)       // admin only
-router.delete('/:id', requireAdmin, deleteTable)    // admin only
-
-// ─── Field Routes ─────────────────────────────────────────────────────────────
-router.post('/:id/fields', requireAdmin, addField)              // admin only
-router.put('/:id/fields/:fieldId', requireAdmin, updateField)   // admin only
-router.delete('/:id/fields/:fieldId', requireAdmin, deleteField)// admin only
+router.get('/', getTables)
+router.get('/:id', getTable)
+router.post('/', requireAdmin, validate(createTableSchema), createTable)
+router.put('/:id', requireAdmin, updateTable)
+router.delete('/:id', requireAdmin, deleteTable)
+router.post('/:id/fields', requireAdmin, addField)
+router.put('/:id/fields/:fieldId', requireAdmin, updateField)
+router.delete('/:id/fields/:fieldId', requireAdmin, deleteField)
 
 export default router

@@ -1,17 +1,18 @@
 import { Router } from 'express'
-import { login, getMe, getUsers, createUser } from '../controllers/auth.controller'
+import { login, logout, getMe, getUsers, createUser, resetPassword, deleteUser, changeOwnPassword } from '../controllers/auth.controller'
 import { authenticate, requireAdmin } from '../middleware/auth.middleware'
+import { validate } from '../lib/validate'
+import { loginSchema, createUserSchema, resetPasswordSchema } from '../lib/schemas'
 
 const router = Router()
 
-// Public
-router.post('/login', login)
-
-// Protected
+router.post('/login', validate(loginSchema), login)
+router.post('/logout', logout)
 router.get('/me', authenticate, getMe)
-
-// Admin only
 router.get('/users', authenticate, requireAdmin, getUsers)
-router.post('/users', authenticate, requireAdmin, createUser)
+router.post('/users', authenticate, requireAdmin, validate(createUserSchema), createUser)
+router.patch('/users/:userId/reset-password', authenticate, requireAdmin, validate(resetPasswordSchema), resetPassword)
+router.post('/change-password', authenticate, changeOwnPassword)
+router.delete('/users/:userId', authenticate, requireAdmin, deleteUser)
 
 export default router

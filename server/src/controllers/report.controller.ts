@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import { AuthenticatedRequest } from '../middleware/auth.middleware'
 import prisma from '../lib/prisma'
+import { cache } from '../lib/cache'
 
 // ─── Low stock alerts ─────────────────────────────────────────────────────────
 export const getLowStockAlerts = async (req: AuthenticatedRequest, res: Response) => {
@@ -48,42 +49,27 @@ export const getLowStockAlerts = async (req: AuthenticatedRequest, res: Response
 // ─── Dashboard summary ────────────────────────────────────────────────────────
 export const getDashboard = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Total tables
+    const cacheKey = 'dashboard'
+    const cached = cache.get(cacheKey)
+    if (cached) {
+      res.json({ success: true, data: cached, cached: true })
+      return
+    }
+
     const totalTables = await prisma.inventoryTable.count()
-
-    // Total rows across all tables
     const totalRows = await prisma.inventoryRow.count()
-
-    // Total stock movements
     const totalMovements = await prisma.stockMovement.count()
 
-    // Recent stock movements (last 10)
-    const recentMovements = await prisma.stockMovement.findMany({
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        table: { select: { id: true, name: true } },
-      },
-    })
-
-    // Low stock count
     const tables = await prisma.inventoryTable.findMany({
       include: {
-        fields: {
-          where: { isStockField: true, lowStockThreshold: { not: null } },
-        },
+        fields: { where: { isStockField: true, lowStockThreshold: { not: null } } },
         rows: true,
       },
     })
 
     let lowStockCount = 0
-    const tablesSummary: any[] = []
-
-    for (const table of tables) {
-      const rowCount = table.rows.length
+    const tablesSummary = tables.map((table) => {
       let lowStockInTable = 0
-
       for (const field of table.fields) {
         for (const row of table.rows) {
           const data = row.data as Record<string, any>
@@ -94,29 +80,113 @@ export const getDashboard = async (req: AuthenticatedRequest, res: Response) => 
           }
         }
       }
-
-      tablesSummary.push({
+      return {
         id: table.id,
         name: table.name,
-        rowCount,
+        rowCount: table.rows.length,
         lowStockCount: lowStockInTable,
         fieldCount: table.fields.length,
-      })
-    }
+      }
+    })
 
-    res.json({
-      success: true,
-      data: {
-        totalTables,
-        totalRows,
-        totalMovements,
-        lowStockCount,
-        tablesSummary,
-        recentMovements,
+    const recentRows = await prisma.inventoryRow.findMany({
+      take: 10,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true } },
+        table: { select: { id: true, name: true } },
       },
     })
+
+    const recentActivity = await Promise.all(
+      recentRows.map(async (row) => {
+        let updatedByUser = null
+        if (row.updatedBy) {
+          updatedByUser = await prisma.user.findUnique({
+            where: { id: row.updatedBy },
+            select: { name: true },
+          })
+        }
+        return {
+          id: row.id,
+          tableName: row.table.name,
+          action: row.updatedBy ? 'updated' : 'created',
+          actorName: row.updatedBy ? (updatedByUser?.name ?? 'Unknown') : row.user.name,
+          timestamp: row.updatedBy ? row.updatedAt : row.createdAt,
+        }
+      })
+    )
+
+    const result = { totalTables, totalRows, totalMovements, lowStockCount, tablesSummary, recentActivity }
+    cache.set(cacheKey, result, 30) // cache 30 seconds
+
+    res.json({ success: true, data: result })
   } catch (error) {
     console.error('GetDashboard error:', error)
+    res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+}
+
+export const getMonthlyMovements = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const cacheKey = `monthly-${new Date().getFullYear()}`
+    const cached = cache.get(cacheKey)
+    if (cached) {
+      res.json({ success: true, data: cached, cached: true })
+      return
+    }
+
+    const year = new Date().getFullYear()
+    const rows = await prisma.inventoryRow.findMany({
+      where: {
+        createdAt: {
+          gte: new Date(`${year}-01-01T00:00:00.000Z`),
+          lte: new Date(`${year}-12-31T23:59:59.999Z`),
+        },
+      },
+      select: { createdAt: true },
+    })
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const monthlyData = months.map((month, index) => ({
+      month,
+      count: rows.filter((r) => new Date(r.createdAt).getMonth() === index).length,
+    }))
+
+    cache.set(cacheKey, monthlyData, 300) // cache 5 minutes
+    res.json({ success: true, data: monthlyData })
+  } catch (error) {
+    console.error('GetMonthlyMovements error:', error)
+    res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+}
+
+// ─── Global Search ────────────────────────────────────────────────────────
+export const globalSearch = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { q } = req.query
+    if (!q || typeof q !== 'string' || q.trim().length === 0) {
+      res.json({ success: true, data: [] })
+      return
+    }
+
+    const searchTerm = `%${q.trim()}%`
+
+    const results = await prisma.$queryRaw<any[]>`
+      SELECT
+        ir.id as "rowId",
+        ir.data,
+        it.id as "tableId",
+        it.name as "tableName"
+      FROM "InventoryRow" ir
+      JOIN "InventoryTable" it ON ir."tableId" = it.id
+      WHERE ir.data::text ILIKE ${searchTerm}
+      LIMIT 20
+    `
+
+    res.json({ success: true, data: results })
+  } catch (error) {
+    console.error('GlobalSearch error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 }
@@ -141,17 +211,65 @@ export const getRowMovements = async (req: AuthenticatedRequest, res: Response) 
   }
 }
 
-// ─── Global Search ────────────────────────────────────────────────────────────
-export const globalSearch = async (req: AuthenticatedRequest, res: Response) => {
+// ─── Dropdown field distribution ──────────────────────────────────────────────
+export const getDropdownStats = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { q } = req.query
+    const cacheKey = 'dropdown-stats'
+    const cached = cache.get(cacheKey)
+    if (cached) { res.json({ success: true, data: cached }); return }
 
-    if (!q || typeof q !== 'string' || q.trim().length === 0) {
-      res.json({ success: true, data: [] })
-      return
+    const tables = await prisma.inventoryTable.findMany({
+      include: {
+        fields: { where: { fieldType: 'dropdown' } },
+        rows: true,
+      },
+    })
+
+    const result: any[] = []
+
+    for (const table of tables) {
+      for (const field of table.fields) {
+        const options = (field.options as any[]) ?? []
+        if (options.length === 0) continue
+
+        const counts: Record<string, number> = {}
+        options.forEach((o) => { counts[o.label] = 0 })
+
+        for (const row of table.rows) {
+          const data = row.data as Record<string, any>
+          const value = data[field.fieldName]
+          if (value && counts[value] !== undefined) counts[value]++
+          else if (value) counts[value] = (counts[value] ?? 0) + 1
+        }
+
+        result.push({
+          tableId: table.id,
+          tableName: table.name,
+          fieldName: field.fieldName,
+          options: options.map((o: any) => ({
+            label: o.label,
+            color: o.color,
+            count: counts[o.label] ?? 0,
+          })),
+          total: table.rows.length,
+        })
+      }
     }
 
-    const searchTerm = q.trim().toLowerCase()
+    cache.set(cacheKey, result, 60)
+    res.json({ success: true, data: result })
+  } catch (error) {
+    console.error('GetDropdownStats error:', error)
+    res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+}
+
+// ─── Asset tag counts per table ───────────────────────────────────────────────
+export const getAssetTagStats = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const cacheKey = 'asset-tag-stats'
+    const cached = cache.get(cacheKey)
+    if (cached) { res.json({ success: true, data: cached }); return }
 
     const tables = await prisma.inventoryTable.findMany({
       include: {
@@ -160,32 +278,35 @@ export const globalSearch = async (req: AuthenticatedRequest, res: Response) => 
       },
     })
 
-    const results: any[] = []
-
-    for (const table of tables) {
-      for (const row of table.rows) {
-        const data = row.data as Record<string, any>
-
-        // Check if any field value matches the search term
-        const matches = Object.entries(data).some(([_key, value]) =>
-          String(value).toLowerCase().includes(searchTerm)
+    const result = tables
+      .map((table) => {
+        // Find a field that looks like an asset tag
+        const assetField = table.fields.find((f) =>
+          f.fieldName.toLowerCase().replace(/[\s_\-]/g, '').includes('assettag') ||
+          f.fieldName.toLowerCase().replace(/[\s_\-]/g, '').includes('asset')
         )
+        if (!assetField) return null
 
-        if (matches) {
-          results.push({
-            tableId: table.id,
-            tableName: table.name,
-            rowId: row.id,
-            data,
-            fields: table.fields,
-          })
+        const count = table.rows.filter((row) => {
+          const data = row.data as Record<string, any>
+          const val = data[assetField.fieldName]
+          return val !== undefined && val !== null && val !== ''
+        }).length
+
+        return {
+          tableId: table.id,
+          tableName: table.name,
+          fieldName: assetField.fieldName,
+          count,
+          total: table.rows.length,
         }
-      }
-    }
+      })
+      .filter(Boolean)
 
-    res.json({ success: true, data: results })
+    cache.set(cacheKey, result, 60)
+    res.json({ success: true, data: result })
   } catch (error) {
-    console.error('GlobalSearch error:', error)
+    console.error('GetAssetTagStats error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 }

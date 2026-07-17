@@ -1,12 +1,17 @@
 import { Response } from 'express'
 import { AuthenticatedRequest } from '../middleware/auth.middleware'
 import prisma from '../lib/prisma'
+import { success } from 'zod/v4'
+import { logActivity, LOG_ACTIONS } from '../lib/logger.activity'
 
 // ─── Get all tables ───────────────────────────────────────────────────────────
 export const getTables = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const tables = await prisma.inventoryTable.findMany({
-      include: { fields: { orderBy: { order: 'asc' } } },
+      include: {
+        fields: { orderBy: { order: 'asc' } },
+        _count: { select: { rows: true } },
+      },
       orderBy: { createdAt: 'desc' },
     })
     res.json({ success: true, data: tables })
@@ -49,12 +54,21 @@ export const createTable = async (req: AuthenticatedRequest, res: Response) => {
       return
     }
 
+    // Check for duplicate table name (case-insensitive)
+    const existing = await prisma.inventoryTable.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+    })
+    if (existing) {
+      res.status(400).json({ success: false, error: `A table named "${existing.name}" already exists` })
+      return
+    }
+
     for (const field of fields) {
       if (!field.fieldName || !field.fieldType) {
         res.status(400).json({ success: false, error: 'Each field must have a name and type' })
         return
       }
-      if (!['text', 'number', 'date', 'boolean'].includes(field.fieldType)) {
+      if (!['text', 'number', 'date', 'boolean', 'dropdown'].includes(field.fieldType)) {
         res.status(400).json({ success: false, error: `Invalid field type: ${field.fieldType}` })
         return
       }
@@ -69,8 +83,10 @@ export const createTable = async (req: AuthenticatedRequest, res: Response) => {
             fieldName: field.fieldName,
             fieldType: field.fieldType,
             required: field.required ?? false,
+            isUnique: field.isUnique ?? false,
             isStockField: field.isStockField ?? false,
             lowStockThreshold: field.lowStockThreshold ?? null,
+            options: field.options ?? null,
             order: index,
           })),
         },
@@ -79,7 +95,22 @@ export const createTable = async (req: AuthenticatedRequest, res: Response) => {
     })
 
     res.status(201).json({ success: true, data: table })
-  } catch (error) {
+
+    await logActivity({
+      userId,
+      action: LOG_ACTIONS.CREATE_TABLE,
+      entityType: 'table',
+      entityId: table.id,
+      entityName: table.name,
+      details: { fieldCount: fields.length },
+      ipAddress: req.ip,
+    })
+
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(400).json({ success: false, error: 'Two fields cannot have the same name' })
+      return
+    }
     console.error('CreateTable error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
@@ -96,6 +127,18 @@ export const updateTable = async (req: AuthenticatedRequest, res: Response) => {
       return
     }
 
+    // Check for duplicate table name (case-insensitive, exclude current table)
+    const existing = await prisma.inventoryTable.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        id: { not: id },
+      },
+    })
+    if (existing) {
+      res.status(400).json({ success: false, error: `A table named "${existing.name}" already exists` })
+      return
+    }
+
     const table = await prisma.inventoryTable.update({
       where: { id },
       data: { name },
@@ -103,6 +146,15 @@ export const updateTable = async (req: AuthenticatedRequest, res: Response) => {
     })
 
     res.json({ success: true, data: table })
+
+    await logActivity({
+      userId: (req as any).user.id,
+      action: LOG_ACTIONS.UPDATE_TABLE,
+      entityType: 'table',
+      entityId: id,
+      entityName: name,
+      ipAddress: req.ip,
+    })
   } catch (error) {
     console.error('UpdateTable error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
@@ -114,7 +166,30 @@ export const deleteTable = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params
 
+    // Check if table has any rows
+    const rowCount = await prisma.inventoryRow.count({ where: { tableId: id } })
+    if (rowCount > 0) {
+      res.status(400).json({
+        success: false,
+        error: `Cannot delete this table — it still has ${rowCount} record${rowCount > 1 ? 's' : ''}. Please remove all records first.`
+      })
+      return
+    }
+
+    // Safe to delete — no rows exist
+    await prisma.stockMovement.deleteMany({ where: { tableId: id } })
+    await prisma.fieldDefinition.deleteMany({ where: { tableId: id } })
     await prisma.inventoryTable.delete({ where: { id } })
+
+    const tableToDelete = await prisma.inventoryTable.findUnique({ where: { id } })
+    await logActivity({
+      userId: (req as any).user.id,
+      action: LOG_ACTIONS.DELETE_TABLE,
+      entityType: 'table',
+      entityId: id,
+      entityName: tableToDelete?.name,
+      ipAddress: req.ip,
+    })
 
     res.json({ success: true, data: { message: 'Table deleted successfully' } })
   } catch (error) {
@@ -127,14 +202,14 @@ export const deleteTable = async (req: AuthenticatedRequest, res: Response) => {
 export const addField = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params
-    const { fieldName, fieldType, required, isStockField, lowStockThreshold } = req.body
+    const { fieldName, fieldType, required, isUnique, isStockField, lowStockThreshold, options } = req.body
 
     if (!fieldName || !fieldType) {
       res.status(400).json({ success: false, error: 'Field name and type are required' })
       return
     }
 
-    if (!['text', 'number', 'date', 'boolean'].includes(fieldType)) {
+    if (!['text', 'number', 'date', 'boolean', 'dropdown'].includes(fieldType)) {
       res.status(400).json({ success: false, error: `Invalid field type: ${fieldType}` })
       return
     }
@@ -147,13 +222,25 @@ export const addField = async (req: AuthenticatedRequest, res: Response) => {
         fieldName,
         fieldType,
         required: required ?? false,
+        isUnique: isUnique ?? false,
         isStockField: isStockField ?? false,
         lowStockThreshold: lowStockThreshold ?? null,
+        options: options ?? null,
         order: fieldCount,
       },
     })
 
     res.status(201).json({ success: true, data: field })
+
+    await logActivity({
+      userId: (req as any).user.id,
+      action: LOG_ACTIONS.ADD_FIELD,
+      entityType: 'field',
+      entityId: field.id,
+      entityName: fieldName,
+      details: { tableId: id, fieldType },
+      ipAddress: req.ip,
+    })
   } catch (error: any) {
     if (error.code === 'P2002') {
       res.status(400).json({ success: false, error: 'A field with that name already exists in this table' })
@@ -168,7 +255,22 @@ export const addField = async (req: AuthenticatedRequest, res: Response) => {
 export const updateField = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { fieldId } = req.params
-    const { fieldName, required, isStockField, lowStockThreshold } = req.body
+    const { fieldName, required, isStockField, lowStockThreshold, options } = req.body
+
+    // Check for duplicate field name in same table
+    if (fieldName) {
+      const existingField = await prisma.fieldDefinition.findFirst({
+        where: {
+          id: { not: fieldId },
+          fieldName: { equals: fieldName, mode: 'insensitive' },
+          table: { fields: { some: { id: fieldId } } },
+        },
+      })
+      if (existingField) {
+        res.status(400).json({ success: false, error: `A field named "${fieldName}" already exists in this table` })
+        return
+      }
+    }
 
     const field = await prisma.fieldDefinition.update({
       where: { id: fieldId },
@@ -177,6 +279,7 @@ export const updateField = async (req: AuthenticatedRequest, res: Response) => {
         ...(required !== undefined && { required }),
         ...(isStockField !== undefined && { isStockField }),
         ...(lowStockThreshold !== undefined && { lowStockThreshold }),
+        ...(options !== undefined && { options }),
       },
     })
 
@@ -192,7 +295,41 @@ export const deleteField = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { fieldId } = req.params
 
+    // Get the field to check its name and table
+    const field = await prisma.fieldDefinition.findUnique({
+      where: { id: fieldId },
+      include: { table: { include: { rows: true } } },
+    })
+
+    if (!field) {
+      res.status(404).json({ success: false, error: 'Field not found' })
+      return
+    }
+
+    // Check if any row has data in this field
+    const rowsWithData = field.table.rows.filter((row) => {
+      const data = row.data as Record<string, any>
+      return data[field.fieldName] !== undefined && data[field.fieldName] !== null && data[field.fieldName] !== ''
+    })
+
+    if (rowsWithData.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: `Cannot delete "${field.fieldName}" — ${rowsWithData.length} record${rowsWithData.length > 1 ? 's' : ''} still have data in this field`,
+      })
+      return
+    }
+
     await prisma.fieldDefinition.delete({ where: { id: fieldId } })
+
+    await logActivity({
+      userId: (req as any).user.id,
+      action: LOG_ACTIONS.DELETE_FIELD,
+      entityType: 'field',
+      entityName: field.fieldName,
+      details: { tableId: field.tableId },
+      ipAddress: req.ip,
+    })
 
     res.json({ success: true, data: { message: 'Field deleted successfully' } })
   } catch (error) {

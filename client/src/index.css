@@ -5,16 +5,13 @@
 @layer base {
   html {
     @apply bg-gray-50 dark:bg-[#0f1117];
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: rgba(100, 100, 100, 0.6) transparent
   }
+
   body {
     @apply bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-gray-100 transition-colors duration-200;
   }
-}
-
-.custom-scrollbar {
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 0.3s;
 }
 
 /* Chrome, Edge, Safari */
@@ -31,11 +28,13 @@
 
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
-  margin: 4px; /* floating effect */
+  margin: 4px;
+  /* floating effect */
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: transparent; /* hidden by default */
+  background-color: transparent;
+  /* hidden by default */
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
@@ -44,7 +43,8 @@
 
 /* Show on hover */
 .custom-scrollbar:hover {
-  scrollbar-color: rgba(100, 100, 100, 0.6) transparent; /* Firefox */
+  scrollbar-color: rgba(100, 100, 100, 0.6) transparent;
+  /* Firefox */
 }
 
 .custom-scrollbar:hover::-webkit-scrollbar-thumb {

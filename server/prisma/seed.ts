@@ -17,8 +17,8 @@ async function main() {
     },
   })
 
-  console.log('✅ Seeded admin user:', admin.email)
-  console.log('   Password: admin123')
+  console.log('Seeded admin user:', admin.email)
+  console.log('Password: admin123')
 }
 
 main()

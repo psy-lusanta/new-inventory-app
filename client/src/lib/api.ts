@@ -3,6 +3,7 @@ import axios from 'axios'
 const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 })
 
 // ─── Attach token to every request ───────────────────────────────────────────
@@ -14,15 +15,28 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// ─── Handle expired token ─────────────────────────────────────────────────────
+// ─── Handle responses ─────────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url ?? ''
+    const status = error.response?.status
+
+    // Never redirect on auth endpoints — let the component handle errors
+    const isAuthEndpoint = url.includes('/auth/login') ||
+      url.includes('/auth/logout') ||
+      url.includes('/auth/me')
+
+    // Only redirect to expired page on 401 from protected endpoints
+    if (status === 401 && !isAuthEndpoint) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      // Prevent redirect if already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login?expired=true'
+      }
     }
+
     return Promise.reject(error)
   }
 )
@@ -31,10 +45,17 @@ api.interceptors.response.use(
 export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
+  logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   getUsers: () => api.get('/auth/users'),
   createUser: (data: { name: string; email: string; password: string; role: string }) =>
     api.post('/auth/users', data),
+  resetPassword: (userId: string, password: string) =>
+    api.patch(`/auth/users/${userId}/reset-password`, { password }),
+  deleteUser: (userId: string) =>
+    api.delete(`/auth/users/${userId}`),
+  changeOwnPassword: (currentPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', { currentPassword, newPassword }),
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────────
@@ -56,7 +77,8 @@ export const tablesApi = {
 
 // ─── Rows ─────────────────────────────────────────────────────────────────────
 export const rowsApi = {
-  getAll: (tableId: string) => api.get(`/tables/${tableId}/rows`),
+  getAll: (tableId: string, page = 1, limit = 50) =>
+    api.get(`/tables/${tableId}/rows?page=${page}&limit=${limit}`),
   getOne: (tableId: string, rowId: string) =>
     api.get(`/tables/${tableId}/rows/${rowId}`),
   create: (tableId: string, data: Record<string, unknown>) =>
@@ -73,6 +95,48 @@ export const reportsApi = {
   getLowStock: () => api.get('/reports/low-stock'),
   getRowMovements: (rowId: string) => api.get(`/reports/movements/${rowId}`),
   search: (q: string) => api.get(`/reports/search?q=${encodeURIComponent(q)}`),
+  getMonthlyMovements: () => api.get('/reports/monthly-movements'),
+  getDropdownStats: () => api.get('/reports/dropdown-stats'),
+  getAssetTagStats: () => api.get('/reports/asset-tag-stats'),
+}
+
+// ─── Logs ─────────────────────────────────────────────────────────────────────
+export const logsApi = {
+  getLogs: (params?: {
+    page?: number
+    limit?: number
+    action?: string
+    userId?: string
+    search?: string
+  }) => {
+    const query = new URLSearchParams()
+    if (params?.page) query.set('page', String(params.page))
+    if (params?.limit) query.set('limit', String(params.limit))
+    if (params?.action) query.set('action', params.action)
+    if (params?.userId) query.set('userId', params.userId)
+    if (params?.search) query.set('search', params.search)
+    return api.get(`/logs?${query.toString()}`)
+  },
+  getStats: () => api.get('/logs/stats'),
+}
+
+// ─── PAF ──────────────────────────────────────────────────────────────────────
+export const pafApi = {
+  getNextPafNo: () => api.get('/paf/next-paf-no'),
+  getForms: () => api.get('/paf'),
+  getForm: (id: string) => api.get(`/paf/${id}`),
+  createForm: (data: any) => api.post('/paf', data),
+  updateForm: (id: string, data: any) => api.put(`/paf/${id}`, data),
+  deleteForm: (id: string) => api.delete(`/paf/${id}`),
+}
+
+// ─── COST ──────────────────────────────────────────────────────────────────────
+export const costApi = {
+  getStats: () => api.get('/costs/stats'),
+  getEntries: (tableId: string) => api.get(`/costs/${tableId}`),
+  createEntry: (tableId: string, data: any) => api.post(`/costs/${tableId}`, data),
+  updateEntry: (entryId: string, data: any) => api.put(`/costs/entry/${entryId}`, data),
+  deleteEntry: (entryId: string) => api.delete(`/costs/entry/${entryId}`),
 }
 
 export default api

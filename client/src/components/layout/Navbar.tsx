@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Search, X, ArrowRight, Sun, Moon, Bell, Plus, Settings, LogOut, ChevronDown } from 'lucide-react'
+import { Search, X, ArrowRight, Sun, Moon, Bell, Plus, Settings, LogOut, ChevronDown, Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { reportsApi } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useModal } from '../../context/ModalContext'
+import ChangePasswordModal from '../modals/ChangePasswordModal'
+
 
 interface SearchResult {
   tableId: string
@@ -17,7 +19,7 @@ interface SearchResult {
 export default function Navbar() {
   const { user, logout, isAdmin } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { openCreateTable } = useModal()
+  const { openCreateTable, toggleSidebar } = useModal()
   const navigate = useNavigate()
 
   const [query, setQuery] = useState('')
@@ -25,6 +27,8 @@ export default function Navbar() {
   const [isSearching, setIsSearching] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   const searchRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
@@ -95,20 +99,26 @@ export default function Navbar() {
     <header className="h-14 bg-white dark:bg-[#1a1d2e] border-b border-gray-200 dark:border-[#2a2d3e] flex items-center px-4 sm:px-6 gap-3 sticky top-0 z-30">
 
       {/* Left — Create Table (admin only) */}
-      <div className="flex items-center shrink-0 ml-8 lg:ml-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <button
+          onClick={toggleSidebar}
+          className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] transition-colors shrink-0"
+        >
+          <Menu size={20} />
+        </button>
         {isAdmin && (
           <button
             onClick={openCreateTable}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 sm:gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium px-2.5 sm:px-3 py-2 rounded-lg transition-colors shrink-0"
           >
             <Plus size={16} />
-            <span className="hidden sm:inline">New Table</span>
+            <span className="hidden md:inline">New Table</span>
           </button>
         )}
       </div>
 
       {/* Center — Global Search */}
-      <div ref={searchRef} className="flex-1 max-w-xl relative mx-auto">
+      <div ref={searchRef} className="flex-1 min-w-0 relative">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -116,7 +126,7 @@ export default function Navbar() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => results.length > 0 && setShowDropdown(true)}
-            placeholder="Global search (asset tag, user, etc...)"
+            placeholder="Search..."
             className="w-full pl-9 pr-8 py-2 text-sm bg-gray-50 dark:bg-[#0f1117] border border-gray-200 dark:border-[#2a2d3e] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-[#1a1d2e] dark:text-gray-100 dark:placeholder-gray-500 transition-colors"
           />
           {query && (
@@ -224,12 +234,13 @@ export default function Navbar() {
               </div>
               <div className="p-1">
                 <button
-                  onClick={() => { setShowUserMenu(false); navigate('/settings') }}
+                  onClick={() => { setShowUserMenu(false); setShowChangePassword(true) }}
                   className="flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3e] rounded-lg transition-colors"
                 >
                   <Settings size={15} />
-                  Settings
+                  Change Password
                 </button>
+
                 <button
                   onClick={logout}
                   className="flex items-center gap-3 w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
@@ -241,7 +252,15 @@ export default function Navbar() {
             </div>
           )}
         </div>
+
+        {showChangePassword && (
+          <ChangePasswordModal
+            forced={false}
+            onClose={() => setShowChangePassword(false)}
+          />
+        )}
       </div>
     </header>
+
   )
 }

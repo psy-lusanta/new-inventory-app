@@ -11,7 +11,12 @@ export interface User {
 }
 
 // ─── Field Types ──────────────────────────────────────────────────────────────
-export type FieldType = 'text' | 'number' | 'date' | 'boolean'
+export type FieldType = 'text' | 'number' | 'date' | 'boolean' | 'dropdown'
+
+export interface DropdownOption {
+  label: string
+  color: string
+}
 
 // ─── Field Definition ─────────────────────────────────────────────────────────
 export interface FieldDefinition {
@@ -20,8 +25,10 @@ export interface FieldDefinition {
   fieldName: string
   fieldType: FieldType
   required: boolean
-  isStockField: boolean           // marks a numeric field as the "stock quantity"
+  isUnique: boolean
+  isStockField: boolean
   lowStockThreshold: number | null
+  options: DropdownOption[] | null
   order: number
 }
 

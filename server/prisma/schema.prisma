@@ -22,6 +22,7 @@ enum FieldType {
   number
   date
   boolean
+  dropdown
 }
 
 enum MovementType {
@@ -33,17 +34,22 @@ enum MovementType {
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(viewer)
-  createdAt DateTime @default(now())
+  id                 String   @id @default(uuid())
+  name               String
+  email              String   @unique
+  password           String
+  role               Role     @default(viewer)
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
 
   // Relations
   inventoryTables InventoryTable[]
   inventoryRows   InventoryRow[]
   stockMovements  StockMovement[]
+  pafForms    PafForm[]
+  activityLogs ActivityLog[]
+  failedLoginAttempts Int      @default(0)
+  lockedUntil         DateTime?
 }
 
 model InventoryTable {
@@ -57,6 +63,9 @@ model InventoryTable {
   fields      FieldDefinition[]
   rows        InventoryRow[]
   movements   StockMovement[]
+
+  @@index([createdAt])
+  @@index([createdBy])
 }
 
 model FieldDefinition {
@@ -64,11 +73,12 @@ model FieldDefinition {
   fieldName         String
   fieldType         FieldType
   required          Boolean   @default(false)
+  isUnique          Boolean   @default(false)
   isStockField      Boolean   @default(false)
   lowStockThreshold Float?
   order             Int       @default(0)
+  options           Json?     // [{ label: "Deployed", color: "#10b981" }]
 
-  // Relations
   tableId           String
   table             InventoryTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
 
@@ -87,6 +97,11 @@ model InventoryRow {
   createdBy String
   user      User            @relation(fields: [createdBy], references: [id])
   movements StockMovement[]
+
+  @@index([tableId])
+  @@index([tableId, createdAt])
+  @@index([createdBy])
+  @@index([updatedAt])
 }
 
 model StockMovement {
@@ -104,4 +119,75 @@ model StockMovement {
   row       InventoryRow   @relation(fields: [rowId], references: [id], onDelete: Cascade)
   createdBy String
   user      User           @relation(fields: [createdBy], references: [id])
+
+  @@index([tableId])
+  @@index([rowId])
+  @@index([createdAt])
+  @@index([createdBy])
+}
+
+// ─── Accountability ───────────────────────────────────────────────────────────────────
+model PafForm {
+  id           String   @id @default(uuid())
+  pafNo        String   @unique
+  employeeName String
+  contactNo    String?
+  address      String?
+  date         String
+  position     String?
+  deptBranch   String?
+  status       String   @default("draft") // draft, finalized
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  createdBy   String
+  user        User     @relation(fields: [createdBy], references: [id])
+  items       PafItem[]
+
+  @@index([createdAt])
+  @@index([createdBy])
+  @@index([pafNo])
+}
+
+model PafItem {
+  id           String  @id @default(uuid())
+  particulars  String?
+  assetTag     String?
+  brand        String?
+  modelPartNo  String?
+  serialImeiNo String?
+  order        Int     @default(0)
+
+  formId       String
+  form         PafForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+}
+
+model PafCounter {
+  id      String @id @default(uuid())
+  dept    String
+  year    String
+  counter Int    @default(0)
+
+  @@unique([dept, year])
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  action     String   
+  entityType String   
+  entityId   String?
+  entityName String?
+  tableName  String?
+  details    Json?    
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@index([entityType])
 }

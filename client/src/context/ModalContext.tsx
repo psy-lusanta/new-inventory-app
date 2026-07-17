@@ -6,6 +6,9 @@ interface ModalContextType {
   isCreateTableOpen: boolean
   tableRefreshKey: number
   triggerTableRefresh: () => void
+  isSidebarOpen: boolean
+  toggleSidebar: () => void
+  setSidebarOpen: (open: boolean) => void
 }
 
 const ModalContext = createContext<ModalContextType | null>(null)
@@ -13,9 +16,14 @@ const ModalContext = createContext<ModalContextType | null>(null)
 export const ModalProvider = ({ children }: { children: ReactNode }) => {
   const [isCreateTableOpen, setIsCreateTableOpen] = useState(false)
   const [tableRefreshKey, setTableRefreshKey] = useState(0)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
 
   const triggerTableRefresh = useCallback(() => {
     setTableRefreshKey((prev) => prev + 1)
+  }, [])
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen((prev) => !prev)
   }, [])
 
   return (
@@ -26,6 +34,9 @@ export const ModalProvider = ({ children }: { children: ReactNode }) => {
         closeCreateTable: () => setIsCreateTableOpen(false),
         tableRefreshKey,
         triggerTableRefresh,
+        isSidebarOpen,
+        toggleSidebar,
+        setSidebarOpen: setIsSidebarOpen,
       }}
     >
       {children}

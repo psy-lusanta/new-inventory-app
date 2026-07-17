@@ -6,12 +6,12 @@ interface User {
   name: string
   email: string
   role: 'admin' | 'staff' | 'viewer'
+  mustChangePassword: boolean
   createdAt: string
 }
 
 interface AuthContextType {
   user: User | null
-  token: string | null
   login: (email: string, password: string) => Promise<void>
   logout: () => void
   isLoading: boolean
@@ -23,55 +23,55 @@ const AuthContext = createContext<AuthContextType | null>(null)
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // ─── Load from localStorage on mount ─────────────────────────────────────
+  // ─── Verify session on mount ──────────────────────────────────────────────
   useEffect(() => {
-    const savedToken = localStorage.getItem('token')
+    // Optimistically load from localStorage for instant UI
     const savedUser = localStorage.getItem('user')
-
-    if (savedToken && savedUser) {
-      setToken(savedToken)
-      setUser(JSON.parse(savedUser))
+    if (savedUser) {
+      try { setUser(JSON.parse(savedUser)) } catch {}
     }
 
-    setIsLoading(false)
+    // Then verify with server
+    authApi.me()
+    
+      .then((res) => {
+        setUser(res.data.data)
+        localStorage.setItem('user', JSON.stringify(res.data.data))
+      })
+      .catch(() => {
+        localStorage.removeItem('user')
+        setUser(null)
+      })
+      .finally(() => setIsLoading(false))
   }, [])
 
   // ─── Login ────────────────────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
     const res = await authApi.login(email, password)
-    const { token, user } = res.data.data
-
-    localStorage.setItem('token', token)
+    const { user } = res.data.data
     localStorage.setItem('user', JSON.stringify(user))
-
-    setToken(token)
     setUser(user)
   }
 
   // ─── Logout ───────────────────────────────────────────────────────────────
   const logout = () => {
-    localStorage.removeItem('token')
+    authApi.logout().catch(() => {})
     localStorage.removeItem('user')
-    setToken(null)
     setUser(null)
     window.location.href = '/login'
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        login,
-        logout,
-        isLoading,
-        isAdmin: user?.role === 'admin',
-        isStaffOrAdmin: user?.role === 'admin' || user?.role === 'staff',
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      login,
+      logout,
+      isLoading,
+      isAdmin: user?.role === 'admin',
+      isStaffOrAdmin: user?.role === 'admin' || user?.role === 'staff',
+    }}>
       {children}
     </AuthContext.Provider>
   )

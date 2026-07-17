@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { tablesApi, rowsApi } from "../lib/api";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
   Settings,
@@ -13,7 +14,10 @@ import {
   Columns,
   Check,
 } from "lucide-react";
+import RowDetailModal from "../components/modals/RowDetailModal";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import ConfirmModal from '../components/modals/ConfirmModal'
 
 interface Field {
   id: string;
@@ -23,6 +27,7 @@ interface Field {
   isStockField: boolean;
   lowStockThreshold: number | null;
   order: number;
+  options?: { label: string; color: string }[]
 }
 
 interface InventoryTable {
@@ -52,18 +57,49 @@ const AUTO_FIELDS = [
 export default function TableViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin, isStaffOrAdmin } = useAuth();
+  const { isAdmin, isStaffOrAdmin, user } = useAuth();
 
   const [table, setTable] = useState<InventoryTable | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterQuery, setFilterQuery] = useState("");
+  const [confirmDeleteRowId, setConfirmDeleteRowId] = useState<string | null>(null)
+
+  const queryClient = useQueryClient()
+
+  const createMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => rowsApi.create(id!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rows', id] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      showToast('Row added successfully')
+      closeModal()
+    },
+    onError: (err: any) => {
+      const message = err.response?.data?.error || 'Failed to save row'
+      setFormError(message)
+      showToast(message, 'error')
+    },
+  })
+
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState<{
+    total: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
+  } | null>(null)
+
+  const LIMIT = 50
 
   // ─── Column visibility ────────────────────────────────────────────────────
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
     {},
   );
   const [showColumnPicker, setShowColumnPicker] = useState(false);
+
+  // ─── Toast  ────────────────────────────────────────────────────
+  const { showToast } = useToast();
 
   // ─── Row modal state ──────────────────────────────────────────────────────
   const [showRowModal, setShowRowModal] = useState(false);
@@ -73,43 +109,70 @@ export default function TableViewPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // ─── Selected row state ───────────────────────────────────────────────────
+  const [selectedRow, setSelectedRow] = useState<Row | null>(null)
+
   // ─── Fetch table + rows ───────────────────────────────────────────────────
   const fetchData = async () => {
-    if (!id) return;
+    if (!id) return
     try {
       const [tableRes, rowsRes] = await Promise.all([
         tablesApi.getOne(id),
-        rowsApi.getAll(id),
-      ]);
-      const fetchedTable = tableRes.data.data;
+        rowsApi.getAll(id, page, LIMIT),
+      ])
+      const fetchedTable = tableRes.data.data
+      setTable(fetchedTable)
+      setRows(rowsRes.data.data)
+      setPagination(rowsRes.data.pagination)
 
-      setTable(fetchedTable);
-      setRows(rowsRes.data.data);
+      // Load saved column visibility, or default to all visible
+      const storageKey = `columns:${user?.id}:${id}`
+      const saved = localStorage.getItem(storageKey)
 
-      // Initialize all columns as visible
-      const initialVisibility: Record<string, boolean> = {};
-      fetchedTable.fields.forEach((f: Field) => {
-        initialVisibility[f.fieldName] = true;
-      });
-      AUTO_FIELDS.forEach((f) => {
-        initialVisibility[f.key] = true;
-      });
-      setVisibleColumns(initialVisibility);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          // Merge saved prefs with any new fields that didn't exist before
+          const merged: Record<string, boolean> = {}
+          fetchedTable.fields.forEach((f: Field) => {
+            merged[f.fieldName] = parsed[f.fieldName] ?? true
+          })
+          AUTO_FIELDS.forEach((f) => {
+            merged[f.key] = parsed[f.key] ?? true
+          })
+          setVisibleColumns(merged)
+        } catch {
+          const initialVisibility: Record<string, boolean> = {}
+          fetchedTable.fields.forEach((f: Field) => { initialVisibility[f.fieldName] = true })
+          AUTO_FIELDS.forEach((f) => { initialVisibility[f.key] = true })
+          setVisibleColumns(initialVisibility)
+        }
+      } else {
+        const initialVisibility: Record<string, boolean> = {}
+        fetchedTable.fields.forEach((f: Field) => { initialVisibility[f.fieldName] = true })
+        AUTO_FIELDS.forEach((f) => { initialVisibility[f.key] = true })
+        setVisibleColumns(initialVisibility)
+      }
     } catch (error) {
-      console.error("Failed to fetch table data:", error);
+      console.error('Failed to fetch table data:', error)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   };
 
   useEffect(() => {
-    fetchData();
-  }, [id]);
+    fetchData()
+  }, [id, page])
 
   // ─── Toggle column visibility ─────────────────────────────────────────────
   const toggleColumn = (key: string) => {
-    setVisibleColumns((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
+    setVisibleColumns((prev) => {
+      const updated = { ...prev, [key]: !prev[key] }
+      const storageKey = `columns:${user?.id}:${id}`
+      localStorage.setItem(storageKey, JSON.stringify(updated))
+      return updated
+    })
+  }
 
   // ─── Open modal for add/edit ──────────────────────────────────────────────
   const openAddModal = () => {
@@ -161,6 +224,7 @@ export default function TableViewPage() {
         setRows((prev) => [res.data.data, ...prev]);
       }
       closeModal();
+      showToast("Row saved successfully", "success");
     } catch (err: any) {
       setFormError(err.response?.data?.error || "Failed to save row");
     } finally {
@@ -176,8 +240,10 @@ export default function TableViewPage() {
     try {
       await rowsApi.delete(id, rowId);
       setRows((prev) => prev.filter((r) => r.id !== rowId));
+      showToast("Row deleted successfully", "success");
     } catch (error) {
       console.error("Failed to delete row:", error);
+      showToast("Failed to delete row", "error");
     } finally {
       setDeletingId(null);
     }
@@ -185,12 +251,15 @@ export default function TableViewPage() {
 
   // ─── Filter rows ──────────────────────────────────────────────────────────
   const filteredRows = rows.filter((row) => {
-    if (!filterQuery.trim()) return true;
-    const q = filterQuery.toLowerCase();
-    return Object.values(row.data).some((val) =>
-      String(val).toLowerCase().includes(q),
-    );
-  });
+    if (!filterQuery.trim()) return true
+    const q = filterQuery.toLowerCase()
+    const dataMatch = Object.values(row.data).some((val) =>
+      String(val).toLowerCase().includes(q)
+    )
+    const createdByMatch = row.user?.name?.toLowerCase().includes(q) ?? false
+    const updatedByMatch = row.updatedByUser?.name?.toLowerCase().includes(q) ?? false
+    return dataMatch || createdByMatch || updatedByMatch
+  })
 
   // ─── Render field input ───────────────────────────────────────────────────
   const renderInput = (field: Field) => {
@@ -241,6 +310,21 @@ export default function TableViewPage() {
             <option value="false">No</option>
           </select>
         );
+      case 'dropdown':
+        return (
+          <select
+            value={value}
+            onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value })}
+            className={baseClass}
+          >
+            <option value="">Select an option...</option>
+            {((field as any).options ?? []).map((opt: any) => (
+              <option key={opt.label} value={opt.label}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        );
       default:
         return (
           <input
@@ -263,11 +347,10 @@ export default function TableViewPage() {
     if (field.fieldType === "boolean") {
       return (
         <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-            value === true || value === "true"
-              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-          }`}
+          className={`text-xs font-medium px-2 py-0.5 rounded-full ${value === true || value === "true"
+            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+            }`}
         >
           {value === true || value === "true" ? "Yes" : "No"}
         </span>
@@ -292,6 +375,26 @@ export default function TableViewPage() {
     }
     if (field.fieldType === "date" && value) {
       return new Date(value).toLocaleDateString();
+    }
+    if (field.fieldType === 'dropdown' && field.options) {
+      const option = (field.options as any[]).find(
+        (o: any) => o.label === value
+      )
+      if (option) {
+        return (
+          <span
+            className="text-xs font-medium px-2 py-0.5 rounded-full"
+            style={{
+              backgroundColor: `${option.color}25`,
+              color: option.color,
+              border: `1px solid ${option.color}50`,
+            }}
+          >
+            {option.label}
+          </span>
+        )
+      }
+      return String(value)
     }
     return String(value);
   };
@@ -344,45 +447,41 @@ export default function TableViewPage() {
   return (
     <div className="p-4 sm:p-6 max-w-full space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-            {table.name}
+            {table.name} Table
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm mt-1">
             {rows.length} record{rows.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {isAdmin && (
             <button
               onClick={() => navigate(`/tables/${id}/settings`)}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-[#2a2d3e] rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2d3e] transition-colors"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-[#2a2d3e] rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2d3e] transition-colors flex-1 sm:flex-initial"
             >
               <Settings size={15} />
-              <span className="hidden sm:inline">Settings</span>
+              <span>Settings</span>
             </button>
           )}
           {isStaffOrAdmin && (
             <button
               onClick={openAddModal}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex-1 sm:flex-initial"
             >
               <Plus size={15} />
-              <span className="hidden sm:inline">Add Row</span>
+              <span>Add Row</span>
             </button>
           )}
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Filter */}
-        <div className="relative flex-1 max-w-sm">
-          <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div className="relative flex-1 sm:max-w-sm">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={filterQuery}
@@ -392,7 +491,7 @@ export default function TableViewPage() {
           />
           {filterQuery && (
             <button
-              onClick={() => setFilterQuery("")}
+              onClick={() => setFilterQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
               <X size={14} />
@@ -403,16 +502,17 @@ export default function TableViewPage() {
 
       {/* Table */}
       <div className="bg-white dark:bg-[#1a1d2e] rounded-xl border border-gray-100 dark:border-[#2a2d3e] shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
-            <thead>
+        <div className="overflow-auto max-h-[calc(100vh-280px)]">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-gray-100 dark:border-[#2a2d3e] bg-gray-50 dark:bg-[#0f1117]">
                 {table.fields
                   .filter((f) => visibleColumns[f.fieldName])
-                  .map((field) => (
+                  .map((field, idx) => (
                     <th
                       key={field.id}
-                      className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                      className={`text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap ${idx === 0 ? 'sticky left-0 z-20 bg-gray-50 dark:bg-[#0f1117]' : ''
+                        }`}
                     >
                       <div className="flex items-center gap-1.5">
                         {field.fieldName}
@@ -424,18 +524,16 @@ export default function TableViewPage() {
                       </div>
                     </th>
                   ))}
-                {AUTO_FIELDS.filter((f) => visibleColumns[f.key]).map(
-                  (field) => (
-                    <th
-                      key={field.key}
-                      className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
-                    >
-                      {field.label}
-                    </th>
-                  ),
-                )}
+                {AUTO_FIELDS.filter((f) => visibleColumns[f.key]).map((field) => (
+                  <th
+                    key={field.key}
+                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                  >
+                    {field.label}
+                  </th>
+                ))}
                 {isStaffOrAdmin && (
-                  <th className="px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="sticky right-0 z-20 bg-gray-50 dark:bg-[#0f1117] px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     <div className="flex items-center justify-between gap-2">
                       <span>Actions</span>
                       <div ref={columnPickerRef} className="relative">
@@ -452,58 +550,59 @@ export default function TableViewPage() {
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-[#2a2d3e]">
+            <tbody className="divide-y divide-gray-50 dark:divide-[#2a2d3e] cursor-pointer">
               {filteredRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={table.fields.length + 5}
                     className="px-4 py-12 text-center text-gray-400 text-sm"
                   >
-                    {filterQuery
-                      ? `No rows match "${filterQuery}"`
-                      : "No rows yet — add one!"}
+                    {filterQuery ? `No rows match "${filterQuery}"` : 'No rows yet — add one!'}
                   </td>
                 </tr>
               ) : (
                 filteredRows.map((row) => (
                   <tr
                     key={row.id}
-                    className="hover:bg-gray-50 dark:hover:bg-[#0f1117] transition-colors"
-                  >
+                    onClick={() => setSelectedRow(row)}
+                    className="hover:bg-gray-50 dark:hover:bg-[#0f1117] transition-colors group">
                     {table.fields
                       .filter((f) => visibleColumns[f.fieldName])
-                      .map((field) => (
+                      .map((field, idx) => (
                         <td
                           key={field.id}
-                          className="px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap"
+                          className={`px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap ${idx === 0
+                            ? 'sticky left-0 z-10 bg-white dark:bg-[#1a1d2e] group-hover:bg-gray-50 dark:group-hover:bg-[#0f1117]'
+                            : ''
+                            }`}
                         >
                           {renderCellValue(field, row.data[field.fieldName])}
                         </td>
                       ))}
-                    {visibleColumns["createdBy"] && (
+                    {visibleColumns['createdBy'] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
-                        {row.user?.name ?? "—"}
+                        {row.user?.name ?? '—'}
                       </td>
                     )}
-                    {visibleColumns["createdAt"] && (
+                    {visibleColumns['createdAt'] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
                         {new Date(row.createdAt).toLocaleDateString()}
                       </td>
                     )}
-                    {visibleColumns["updatedBy"] && (
+                    {visibleColumns['updatedBy'] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
-                        {row.updatedByUser?.name ?? "—"}
+                        {row.updatedByUser?.name ?? '—'}
                       </td>
                     )}
-                    {visibleColumns["updatedAt"] && (
+                    {visibleColumns['updatedAt'] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
-                        {row.updatedBy
-                          ? new Date(row.updatedAt).toLocaleDateString()
-                          : "—"}
+                        {row.updatedBy ? new Date(row.updatedAt).toLocaleDateString() : '—'}
                       </td>
                     )}
                     {isStaffOrAdmin && (
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td
+                        onClick={(e) => e.stopPropagation()}
+                        className="sticky right-0 z-10 bg-white dark:bg-[#1a1d2e] group-hover:bg-gray-50 dark:group-hover:bg-[#0f1117] px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => openEditModal(row)}
@@ -530,12 +629,19 @@ export default function TableViewPage() {
       </div>
 
       {/* Add/Edit Row Modal */}
-      {showRowModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+      {showRowModal && createPortal(
+        <div
+          className="custom-scrollbar fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4"
+          style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', backgroundColor: 'rgba(0,0,0,0.6)' }}
+          onClick={closeModal}
+        >
+          <div
+            className="bg-white dark:bg-[#1a1d2e] rounded-none sm:rounded-2xl shadow-xl w-full h-full sm:h-auto sm:max-w-md sm:max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3e]">
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                {editingRow ? "Edit Row" : "Add Row"}
+                {editingRow ? 'Edit Row' : 'Add Row'}
               </h2>
               <button
                 onClick={closeModal}
@@ -549,9 +655,7 @@ export default function TableViewPage() {
                 <div key={field.id}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     {field.fieldName}
-                    {field.required && (
-                      <span className="text-red-500 ml-1">*</span>
-                    )}
+                    {field.required && <span className="text-red-500 ml-1">*</span>}
                     {field.isStockField && (
                       <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-full">
                         stock
@@ -579,15 +683,12 @@ export default function TableViewPage() {
                 disabled={isSaving}
                 className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-50"
               >
-                {isSaving
-                  ? "Saving..."
-                  : editingRow
-                    ? "Save Changes"
-                    : "Add Row"}
+                {isSaving ? 'Saving...' : editingRow ? 'Save Changes' : 'Add Row'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Column Picker */}
@@ -637,11 +738,10 @@ export default function TableViewPage() {
                     )}
                   </div>
                   <div
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                      visibleColumns[field.fieldName]
-                        ? "bg-indigo-600 border-indigo-600"
-                        : "border-gray-300 dark:border-gray-600"
-                    }`}
+                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${visibleColumns[field.fieldName]
+                      ? "bg-indigo-600 border-indigo-600"
+                      : "border-gray-300 dark:border-gray-600"
+                      }`}
                   >
                     {visibleColumns[field.fieldName] && (
                       <Check size={11} className="text-white" />
@@ -660,11 +760,10 @@ export default function TableViewPage() {
                 >
                   <span>{field.label}</span>
                   <div
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                      visibleColumns[field.key]
-                        ? "bg-indigo-600 border-indigo-600"
-                        : "border-gray-300 dark:border-gray-600"
-                    }`}
+                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${visibleColumns[field.key]
+                      ? "bg-indigo-600 border-indigo-600"
+                      : "border-gray-300 dark:border-gray-600"
+                      }`}
                   >
                     {visibleColumns[field.key] && (
                       <Check size={11} className="text-white" />
@@ -676,6 +775,82 @@ export default function TableViewPage() {
           </div>,
           document.body,
         )}
+
+      {/* Footer */}
+      {rows.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-[#1a1d2e] border border-gray-100 dark:border-[#2a2d3e] rounded-xl text-xs text-gray-500 dark:text-gray-400">
+          <span>
+            Showing <span className="font-semibold text-gray-900 dark:text-white">{filteredRows.length}</span> of{' '}
+            <span className="font-semibold text-gray-900 dark:text-white">{rows.length}</span> records
+            {filterQuery && ` matching "${filterQuery}"`}
+          </span>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-[#1a1d2e] border border-gray-100 dark:border-[#2a2d3e] rounded-xl">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Page <span className="font-semibold text-gray-900 dark:text-white">{page}</span> of{' '}
+            <span className="font-semibold text-gray-900 dark:text-white">{pagination.totalPages}</span>
+            {' '}· {pagination.total} total records
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={!pagination.hasPrev}
+              className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-[#2a2d3e] rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2d3e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-gray-600 dark:text-gray-400"
+            >
+              ← Prev
+            </button>
+            {/* Page numbers */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                let pageNum: number
+                if (pagination.totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (page <= 3) {
+                  pageNum = i + 1
+                } else if (page >= pagination.totalPages - 2) {
+                  pageNum = pagination.totalPages - 4 + i
+                } else {
+                  pageNum = page - 2 + i
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-7 h-7 text-xs font-medium rounded-lg transition-colors ${pageNum === page
+                      ? 'bg-indigo-600 text-white'
+                      : 'border border-gray-200 dark:border-[#2a2d3e] hover:bg-gray-50 dark:hover:bg-[#2a2d3e] text-gray-600 dark:text-gray-400'
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!pagination.hasNext}
+              className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-[#2a2d3e] rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2d3e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-gray-600 dark:text-gray-400"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ------ Row Detail Modal ------ */}
+      {selectedRow && table && createPortal(
+        <RowDetailModal
+          row={selectedRow}
+          fields={table.fields}
+          tableName={table.name}
+          onClose={() => setSelectedRow(null)}
+        />,
+        document.body
+      )}
     </div>
   );
 }
