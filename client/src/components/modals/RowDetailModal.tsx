@@ -173,7 +173,6 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
     >
       <div
         className="custom-scrollbar bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
       >
 
         {/* Header */}

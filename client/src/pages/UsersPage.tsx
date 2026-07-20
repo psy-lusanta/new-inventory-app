@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { authApi } from '../lib/api'
+import ConfirmModal from '../components/modals/ConfirmModal'
 import { Plus, X, Shield, Eye, Briefcase, Trash2, KeyRound } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
@@ -40,6 +41,7 @@ export default function UsersPage() {
 
   // ─── Delete ───────────────────────────────────────────────────────────────
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null)
 
   const fetchUsers = async () => {
     try {
@@ -94,17 +96,18 @@ export default function UsersPage() {
     }
   }
 
-  const handleDeleteUser = async (user: User) => {
-    if (!confirm(`Delete "${user.name}"? This cannot be undone.`)) return
-    setDeletingId(user.id)
+  const handleDeleteUser = async () => {
+    if (!deleteUserTarget) return
+    setDeletingId(deleteUserTarget.id)
     try {
-      await authApi.deleteUser(user.id)
-      setUsers((prev) => prev.filter((u) => u.id !== user.id))
+      await authApi.deleteUser(deleteUserTarget.id)
+      setUsers((prev) => prev.filter((u) => u.id !== deleteUserTarget.id))
       showToast('User deleted')
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Failed to delete user', 'error')
     } finally {
       setDeletingId(null)
+      setDeleteUserTarget(null)
     }
   }
 
@@ -197,7 +200,7 @@ export default function UsersPage() {
                           </button>
                           {!isSelf && (
                             <button
-                              onClick={() => handleDeleteUser(user)}
+                              onClick={() => setDeleteUserTarget(user)}
                               disabled={deletingId === user.id}
                               className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
                               title="Delete user"
@@ -309,6 +312,21 @@ export default function UsersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Delete User Modal */}
+      {deleteUserTarget && (
+        <ConfirmModal
+          title={`Delete "${deleteUserTarget.name}"?`}
+          message={
+            <>
+              This will permanently delete <strong>{deleteUserTarget.email}</strong>'s account. This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete User"
+          onConfirm={handleDeleteUser}
+          onClose={() => setDeleteUserTarget(null)}
+        />
       )}
     </div>
   )

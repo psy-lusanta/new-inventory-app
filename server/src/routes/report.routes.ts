@@ -7,9 +7,9 @@ import {
   getMonthlyMovements,
   getDropdownStats,
   getAssetTagStats,
+  getCostStats
 } from '../controllers/report.controller'
 import { authenticate } from '../middleware/auth.middleware'
-
 
 const router = Router()
 
@@ -22,4 +22,6 @@ router.get('/search', globalSearch)
 router.get('/monthly-movements', getMonthlyMovements)
 router.get('/dropdown-stats', getDropdownStats)
 router.get('/asset-tag-stats', getAssetTagStats)
+router.get('/cost-stats', getCostStats)
+
 export default router

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { costApi, reportsApi } from '../lib/api'
+import { reportsApi } from '../lib/api'
 import {
   Table2,
   Settings2,
@@ -20,9 +20,11 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  AreaChart,
+  Area
 } from 'recharts'
 import { useAuth } from '../context/AuthContext'
+import { SkeletonCard } from '../components/ui/Skeleton'
 
 interface MonthlyMovement {
   month: string
@@ -74,7 +76,7 @@ interface CostStats {
   totalSpend: number
   monthlySpend: number
   yearlySpend: number
-  byTable: { tableId: string; tableName: string; totalCost: number }[]
+  byTable: { tableId: string; tableName: string; totalCost: number; monthCost: number }[]
   monthlyTrend: { month: string; total: number }[]
 }
 
@@ -98,7 +100,6 @@ export default function DashboardPage() {
   const [assetTagStats, setAssetTagStats] = useState<AssetTagStat[]>([])
   const [costStats, setCostStats] = useState<CostStats | null>(null)
 
-
   const tileStorageKey = `dashboard-tiles:${user?.id}`
   const pieStorageKey = `dashboard-pie:${user?.id}`
 
@@ -112,7 +113,7 @@ export default function DashboardPage() {
           reportsApi.getMonthlyMovements(),
           reportsApi.getDropdownStats(),
           reportsApi.getAssetTagStats(),
-          costApi.getStats(),
+          reportsApi.getCostStats(),
         ])
 
         const dashboard = dashRes.data.data
@@ -121,7 +122,6 @@ export default function DashboardPage() {
         setDropdownStats(dropdownRes.data.data)
         setAssetTagStats(assetRes.data.data)
         setCostStats(costRes.data.data)
-
 
         // Load saved tile preferences
         const savedTiles = localStorage.getItem(tileStorageKey)
@@ -194,8 +194,11 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[60vh]">
-        <div className="text-gray-400 text-sm">Loading dashboard...</div>
+      <div className="p-4 sm:p-6 space-y-6">
+        <div className="h-8 bg-gray-200 dark:bg-[#2a2d3e] rounded w-48 animate-pulse" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
       </div>
     )
   }
@@ -273,6 +276,103 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Cost Growth — only show if there's cost data */}
+      {costStats && costStats.totalSpend > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Cost growth area chart */}
+          <div className="lg:col-span-2 bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 sm:p-5 border border-gray-100 dark:border-[#2a2d3e]">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+                  Cost Growth — {new Date().getFullYear()}
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Monthly spend trend across all tables
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400">This month</p>
+                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                  {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(costStats.monthlySpend)}
+                </p>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={costStats.monthlyTrend}>
+                <defs>
+                  <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#8892a4' }} />
+                <YAxis
+                  tick={{ fontSize: 11, fill: '#8892a4' }}
+                  width={55}
+                  tickFormatter={(v) => `₱${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1a1d2e', border: '1px solid #2a2d3e', borderRadius: '8px', color: '#e2e8f0', fontSize: '12px' }}
+                  formatter={(value: number) => [
+                    new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value),
+                    'Spend'
+                  ]}
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fill="url(#costGradient)"
+                  dot={{ fill: '#10b981', r: 3 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Cost by table */}
+          <div className="bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 sm:p-5 border border-gray-100 dark:border-[#2a2d3e]">
+            <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white mb-1">
+              Cost by Table
+            </h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Grand total: <span className="font-semibold text-emerald-500">
+                {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(costStats.totalSpend)}
+              </span>
+            </p>
+            <div className="space-y-3">
+              {costStats.byTable.slice(0, 5).map((table, index) => {
+                const max = Math.max(...costStats.byTable.map((t) => t.totalCost), 1)
+                return (
+                  <div key={table.tableId}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                        <span className="text-xs text-gray-700 dark:text-gray-300 truncate">{table.tableName}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-900 dark:text-white shrink-0 ml-2">
+                        {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', notation: 'compact' }).format(table.totalCost)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${(table.totalCost / max) * 100}%`,
+                          backgroundColor: PIE_COLORS[index % PIE_COLORS.length],
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -391,86 +491,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-
-      {/* Cost Summary */}
-      {costStats && (costStats.totalSpend > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* Monthly cost trend */}
-          <div className="bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 sm:p-5 border border-gray-100 dark:border-[#2a2d3e]">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-                  Monthly Spend
-                </h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {new Date().getFullYear()} · Total: {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(costStats.yearlySpend)}
-                </p>
-              </div>
-              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(costStats.monthlySpend)} this month
-              </span>
-            </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={costStats.monthlyTrend}>
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#8892a4' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#8892a4' }} width={55}
-                  tickFormatter={(v) => `₱${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
-                />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1a1d2e', border: '1px solid #2a2d3e', borderRadius: '8px', color: '#e2e8f0', fontSize: '12px' }}
-                  formatter={(value: number) => [new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value), 'Spend']}
-                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                />
-                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
-                  {costStats.monthlyTrend.map((_, index) => (
-                    <Cell key={index} fill={index === new Date().getMonth() ? '#10b981' : '#6ee7b7'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Cost by table */}
-          <div className="bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 sm:p-5 border border-gray-100 dark:border-[#2a2d3e]">
-            <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white mb-4">
-              Cost by Table
-            </h2>
-            <div className="space-y-3">
-              {costStats.byTable.slice(0, 5).map((table, index) => {
-                const max = Math.max(...costStats.byTable.map((t) => t.totalCost), 1)
-                return (
-                  <div key={table.tableId}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                        <span className="text-sm text-gray-800 dark:text-gray-200 truncate max-w-[160px]">{table.tableName}</span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white shrink-0">
-                        {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(table.totalCost)}
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${(table.totalCost / max) * 100}%`, backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-[#2a2d3e] flex items-center justify-between">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Grand Total</span>
-              <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
-                {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(costStats.totalSpend)}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-
       {/* Overall Records by Table */}
       <div className="bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 sm:p-5 border border-gray-100 dark:border-[#2a2d3e]">
         <div className="flex items-center justify-between mb-4">
@@ -535,6 +555,7 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
 
       {/* Dropdown Status Dashboard */}
       {dropdownStats.length > 0 && (

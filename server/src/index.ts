@@ -10,6 +10,7 @@ import rowRoutes from './routes/row.routes'
 import reportRoutes from './routes/report.routes'
 import pafRoutes from './routes/paf.routes'
 import logRoutes from './routes/log.routes'
+import notificationRoutes from './routes/notification.routes'
 
 dotenv.config()
 
@@ -82,6 +83,7 @@ app.use('/api/tables/:tableId/rows', rowRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/paf', pafRoutes)
 app.use('/api/logs', logRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

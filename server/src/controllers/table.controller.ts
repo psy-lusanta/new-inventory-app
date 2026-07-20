@@ -54,7 +54,7 @@ export const createTable = async (req: AuthenticatedRequest, res: Response) => {
       return
     }
 
-    // Check for duplicate table name (case-insensitive)
+    // Check duplicate table name
     const existing = await prisma.inventoryTable.findFirst({
       where: { name: { equals: name, mode: 'insensitive' } },
     })
@@ -63,6 +63,7 @@ export const createTable = async (req: AuthenticatedRequest, res: Response) => {
       return
     }
 
+    // Validate user-defined fields
     for (const field of fields) {
       if (!field.fieldName || !field.fieldType) {
         res.status(400).json({ success: false, error: 'Each field must have a name and type' })
@@ -74,12 +75,29 @@ export const createTable = async (req: AuthenticatedRequest, res: Response) => {
       }
     }
 
+    // Auto-inject Cost field at the end — always required, always number
+    const costFieldExists = fields.some(
+      (f: any) => f.fieldName.toLowerCase().replace(/\s/g, '') === 'cost'
+    )
+
+    const allFields = costFieldExists ? fields : [
+      ...fields,
+      {
+        fieldName: 'Cost',
+        fieldType: 'number',
+        required: false,
+        isStockField: false,
+        lowStockThreshold: null,
+        options: null,
+      },
+    ]
+
     const table = await prisma.inventoryTable.create({
       data: {
         name,
         createdBy: userId,
         fields: {
-          create: fields.map((field: any, index: number) => ({
+          create: allFields.map((field: any, index: number) => ({
             fieldName: field.fieldName,
             fieldType: field.fieldType,
             required: field.required ?? false,
@@ -95,17 +113,6 @@ export const createTable = async (req: AuthenticatedRequest, res: Response) => {
     })
 
     res.status(201).json({ success: true, data: table })
-
-    await logActivity({
-      userId,
-      action: LOG_ACTIONS.CREATE_TABLE,
-      entityType: 'table',
-      entityId: table.id,
-      entityName: table.name,
-      details: { fieldCount: fields.length },
-      ipAddress: req.ip,
-    })
-
   } catch (error: any) {
     if (error.code === 'P2002') {
       res.status(400).json({ success: false, error: 'Two fields cannot have the same name' })
@@ -255,7 +262,7 @@ export const addField = async (req: AuthenticatedRequest, res: Response) => {
 export const updateField = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { fieldId } = req.params
-    const { fieldName, required, isStockField, lowStockThreshold, options } = req.body
+    const { fieldName, fieldType, required, isStockField, lowStockThreshold, options } = req.body
 
     // Check for duplicate field name in same table
     if (fieldName) {
@@ -276,6 +283,7 @@ export const updateField = async (req: AuthenticatedRequest, res: Response) => {
       where: { id: fieldId },
       data: {
         ...(fieldName && { fieldName }),
+        ...(fieldType && { fieldType }),
         ...(required !== undefined && { required }),
         ...(isStockField !== undefined && { isStockField }),
         ...(lowStockThreshold !== undefined && { lowStockThreshold }),
@@ -295,7 +303,6 @@ export const deleteField = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { fieldId } = req.params
 
-    // Get the field to check its name and table
     const field = await prisma.fieldDefinition.findUnique({
       where: { id: fieldId },
       include: { table: { include: { rows: true } } },
@@ -306,10 +313,21 @@ export const deleteField = async (req: AuthenticatedRequest, res: Response) => {
       return
     }
 
+    // Block deletion of required fields
+    if (field.required) {
+      res.status(400).json({
+        success: false,
+        error: `"${field.fieldName}" is a required field and cannot be deleted. Remove the required constraint first.`
+      })
+      return
+    }
+
     // Check if any row has data in this field
     const rowsWithData = field.table.rows.filter((row) => {
       const data = row.data as Record<string, any>
-      return data[field.fieldName] !== undefined && data[field.fieldName] !== null && data[field.fieldName] !== ''
+      return data[field.fieldName] !== undefined &&
+        data[field.fieldName] !== null &&
+        data[field.fieldName] !== ''
     })
 
     if (rowsWithData.length > 0) {
@@ -321,19 +339,42 @@ export const deleteField = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     await prisma.fieldDefinition.delete({ where: { id: fieldId } })
-
-    await logActivity({
-      userId: (req as any).user.id,
-      action: LOG_ACTIONS.DELETE_FIELD,
-      entityType: 'field',
-      entityName: field.fieldName,
-      details: { tableId: field.tableId },
-      ipAddress: req.ip,
-    })
-
     res.json({ success: true, data: { message: 'Field deleted successfully' } })
   } catch (error) {
     console.error('DeleteField error:', error)
+    res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+}
+
+// ─── Reorder fields ─────────────────────────────────────────────────────────────
+export const reorderFields = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params
+    const { fieldIds } = req.body // ordered array of field IDs
+
+    if (!Array.isArray(fieldIds)) {
+      res.status(400).json({ success: false, error: 'fieldIds must be an array' })
+      return
+    }
+
+    // Update order for each field
+    await Promise.all(
+      fieldIds.map((fieldId: string, index: number) =>
+        prisma.fieldDefinition.update({
+          where: { id: fieldId },
+          data: { order: index },
+        })
+      )
+    )
+
+    const table = await prisma.inventoryTable.findUnique({
+      where: { id },
+      include: { fields: { orderBy: { order: 'asc' } } },
+    })
+
+    res.json({ success: true, data: table })
+  } catch (error) {
+    console.error('ReorderFields error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 }

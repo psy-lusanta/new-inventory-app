@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Search, X, ArrowRight, Sun, Moon, Bell, Plus, Settings, LogOut, ChevronDown, Menu } from 'lucide-react'
+import { Search, X, ArrowRight, Sun, Moon, Plus, Settings, LogOut, ChevronDown, Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { reportsApi } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useModal } from '../../context/ModalContext'
 import ChangePasswordModal from '../modals/ChangePasswordModal'
+import NotificationBell from '../notifications/NotificationBell'
 
 
 interface SearchResult {
@@ -195,9 +196,7 @@ export default function Navbar() {
         </button>
 
         {/* Notifications */}
-        <button className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] transition-colors">
-          <Bell size={18} />
-        </button>
+        <NotificationBell />
 
         {/* Divider */}
         <div className="w-px h-6 bg-gray-200 dark:bg-[#2a2d3e] mx-1" />

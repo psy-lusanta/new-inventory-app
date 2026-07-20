@@ -310,3 +310,81 @@ export const getAssetTagStats = async (req: AuthenticatedRequest, res: Response)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 }
+
+// ─── Cost stats per table ─────────────────────────────────────────────────────
+export const getCostStats = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const cacheKey = 'cost-stats'
+    const cached = cache.get(cacheKey)
+    if (cached) { res.json({ success: true, data: cached }); return }
+
+    const now = new Date()
+    const year = now.getFullYear()
+    const monthStart = new Date(year, now.getMonth(), 1)
+    const yearStart = new Date(year, 0, 1)
+
+    // Get all rows across all tables that have a Cost field
+    const tables = await prisma.inventoryTable.findMany({
+      include: {
+        fields: { where: { fieldName: { equals: 'Cost', mode: 'insensitive' } } },
+        rows: { select: { data: true, createdAt: true } },
+      },
+    })
+
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+    let totalSpend = 0
+    let monthlySpend = 0
+    let yearlySpend = 0
+    const byTable: any[] = []
+    const monthlyTrend = months.map((month) => ({ month, total: 0 }))
+
+    for (const table of tables) {
+      if (table.fields.length === 0) continue // no Cost field
+
+      const costFieldName = table.fields[0].fieldName
+      let tableCost = 0
+      let tableMonthCost = 0
+
+      for (const row of table.rows) {
+        const data = row.data as Record<string, any>
+        const cost = Number(data[costFieldName] ?? 0)
+        if (isNaN(cost)) continue
+
+        tableCost += cost
+        totalSpend += cost
+
+        const rowDate = new Date(row.createdAt)
+        const monthIndex = rowDate.getMonth()
+
+        if (rowDate >= monthStart) monthlySpend += cost
+        if (rowDate >= yearStart) {
+          yearlySpend += cost
+          if (rowDate.getFullYear() === year) {
+            monthlyTrend[monthIndex].total += cost
+            tableMonthCost += cost
+          }
+        }
+      }
+
+      if (tableCost > 0) {
+        byTable.push({
+          tableId: table.id,
+          tableName: table.name,
+          totalCost: tableCost,
+          monthCost: tableMonthCost,
+          rowCount: table.rows.length,
+        })
+      }
+    }
+
+    byTable.sort((a, b) => b.totalCost - a.totalCost)
+
+    const result = { totalSpend, monthlySpend, yearlySpend, byTable, monthlyTrend }
+    cache.set(cacheKey, result, 60)
+    res.json({ success: true, data: result })
+  } catch (error) {
+    console.error('getCostStats error:', error)
+    res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+}

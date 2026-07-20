@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware'
 import prisma from '../lib/prisma'
 import { cache } from '../lib/cache'
 import { logActivity, LOG_ACTIONS } from '../lib/logger.activity'
+import { createNotification } from './notification.controller'
 
 // ─── Helper: check unique fields ──────────────────────────────────────────────
 const checkUniqueFields = async (
@@ -44,7 +45,7 @@ export const getRows = async (req: AuthenticatedRequest, res: Response) => {
     const [rows, total] = await Promise.all([
       prisma.inventoryRow.findMany({
         where: { tableId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'asc' },
         skip,
         take: limit,
         include: {
@@ -195,9 +196,24 @@ export const createRow = async (req: AuthenticatedRequest, res: Response) => {
       ipAddress: req.ip,
     })
 
-    res.status(201).json({ success: true, data: row })
+    // Notify all admins when a new row is added
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin', id: { not: userId } },
+      select: { id: true },
+    })
+    await Promise.all(admins.map((admin) =>
+      createNotification(
+        admin.id,
+        'New Record Added',
+        `${req.user!.email} added a record to ${table.name}`,
+        'info',
+        `/tables/${tableId}`
+      )
+    ))
     cache.invalidate('dashboard')
     cache.invalidatePattern('monthly')
+    cache.invalidate('cost-stats')
+    res.status(201).json({ success: true, data: row })
   } catch (error) {
     console.error('CreateRow error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })

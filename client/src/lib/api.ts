@@ -98,6 +98,8 @@ export const reportsApi = {
   getMonthlyMovements: () => api.get('/reports/monthly-movements'),
   getDropdownStats: () => api.get('/reports/dropdown-stats'),
   getAssetTagStats: () => api.get('/reports/asset-tag-stats'),
+  getCostStats: () => api.get('/reports/cost-stats'),
+  reorderFields: (tableId: string, fieldIds: string[]) => api.put(`/tables/${tableId}/fields/reorder`, { fieldIds }),
 }
 
 // ─── Logs ─────────────────────────────────────────────────────────────────────
@@ -130,13 +132,20 @@ export const pafApi = {
   deleteForm: (id: string) => api.delete(`/paf/${id}`),
 }
 
-// ─── COST ──────────────────────────────────────────────────────────────────────
 export const costApi = {
   getStats: () => api.get('/costs/stats'),
   getEntries: (tableId: string) => api.get(`/costs/${tableId}`),
   createEntry: (tableId: string, data: any) => api.post(`/costs/${tableId}`, data),
   updateEntry: (entryId: string, data: any) => api.put(`/costs/entry/${entryId}`, data),
   deleteEntry: (entryId: string) => api.delete(`/costs/entry/${entryId}`),
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+export const notificationsApi = {
+  getAll: () => api.get('/notifications'),
+  markRead: (id: string) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch('/notifications/all/read'),
+  delete: (id: string) => api.delete(`/notifications/${id}`),
 }
 
 export default api

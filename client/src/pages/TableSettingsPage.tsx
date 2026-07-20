@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { tablesApi } from '../lib/api'
-import { ArrowLeft, Plus, Trash2, X, Save, Pencil } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, X, Save, Pencil, GripVertical } from 'lucide-react'
 import { useModal } from '../context/ModalContext'
 import { useToast } from '../context/ToastContext'
-import { createPortal } from 'react-dom'
-
-//Modals
 import ConfirmModal from '../components/modals/ConfirmModal'
-import DeleteFieldModal from '../components/modals/DeleteFieldModal'
 import EditFieldModal from '../components/modals/EditFieldModal'
+import { createPortal } from 'react-dom'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface DropdownOption {
   label: string
@@ -38,6 +52,109 @@ const PRESET_COLORS = [
   '#06b6d4', '#8b5cf6', '#ec4899', '#64748b',
 ]
 
+// ─── Sortable Field Item ──────────────────────────────────────────────────────
+function SortableField({
+  field,
+  onEdit,
+  onDelete,
+  deletingFieldId,
+}: {
+  field: Field
+  onEdit: (field: Field) => void
+  onDelete: (field: Field) => void
+  deletingFieldId: string | null
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    position: isDragging ? 'relative' as const : undefined,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-[#0f1117] rounded-lg border border-gray-100 dark:border-[#2a2d3e]"
+    >
+      {/* Drag handle */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="p-1 text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 cursor-grab active:cursor-grabbing touch-none shrink-0"
+        title="Drag to reorder"
+      >
+        <GripVertical size={15} />
+      </button>
+
+      {/* Field info */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+            {field.fieldName}
+          </p>
+          {field.required && (
+            <span className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-full">
+              required
+            </span>
+          )}
+          {field.isStockField && (
+            <span className="text-xs text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-full">
+              stock
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <span className="text-xs text-gray-400 capitalize">{field.fieldType}</span>
+          {field.isStockField && field.lowStockThreshold !== null && (
+            <span className="text-xs text-gray-400">· threshold: {field.lowStockThreshold}</span>
+          )}
+          {field.fieldType === 'dropdown' && field.options && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {(field.options as DropdownOption[]).map((opt) => (
+                <span
+                  key={opt.label}
+                  className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                  style={{
+                    backgroundColor: `${opt.color}25`,
+                    color: opt.color,
+                    border: `1px solid ${opt.color}50`,
+                  }}
+                >
+                  {opt.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => onEdit(field)}
+          className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+          title="Edit field"
+        >
+          <Pencil size={13} />
+        </button>
+        <button
+          onClick={() => onDelete(field)}
+          disabled={deletingFieldId === field.id}
+          className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+          title={field.required ? 'Cannot delete required fields' : 'Delete field'}
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function TableSettingsPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -48,14 +165,7 @@ export default function TableSettingsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [tableName, setTableName] = useState('')
   const [isSavingName, setIsSavingName] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deletingField, setDeletingField] = useState<Field | null>(null)
-  const [editingField, setEditingField] = useState<Field | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
 
-  const [confirmField, setConfirmField] = useState<Field | null>(null)
-
-  // ─── Add field state ──────────────────────────────────────────────────────
   const [showAddField, setShowAddField] = useState(false)
   const [newField, setNewField] = useState({
     fieldName: '',
@@ -68,6 +178,17 @@ export default function TableSettingsPage() {
   const [isAddingField, setIsAddingField] = useState(false)
   const [fieldError, setFieldError] = useState('')
   const [deletingFieldId, setDeletingFieldId] = useState<string | null>(null)
+
+  // Modals
+  const [confirmField, setConfirmField] = useState<Field | null>(null)
+  const [editingField, setEditingField] = useState<Field | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+
+  // DnD
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
 
   useEffect(() => {
     const fetchTable = async () => {
@@ -85,6 +206,32 @@ export default function TableSettingsPage() {
     fetchTable()
   }, [id])
 
+  // ─── Drag end ─────────────────────────────────────────────────────────────
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id || !table) return
+
+    const oldIndex = table.fields.findIndex((f) => f.id === active.id)
+    const newIndex = table.fields.findIndex((f) => f.id === over.id)
+    const reordered = arrayMove(table.fields, oldIndex, newIndex)
+    const previousFields = table.fields
+
+    setTable({ ...table, fields: reordered })
+
+    try {
+      await Promise.all(
+        reordered.map((field, index) =>
+          tablesApi.updateField(id!, field.id, { order: index })
+        )
+      )
+      showToast('Field order saved')
+    } catch {
+      showToast('Failed to save order', 'error')
+      setTable((prev) => prev ? { ...prev, fields: previousFields } : prev)
+    }
+  }
+
+  // ─── Save table name ──────────────────────────────────────────────────────
   const handleSaveName = async () => {
     if (!id || !tableName.trim()) return
     setIsSavingName(true)
@@ -99,10 +246,14 @@ export default function TableSettingsPage() {
     }
   }
 
+  // ─── Add field ────────────────────────────────────────────────────────────
   const addOption = () => {
     setNewField((prev) => ({
       ...prev,
-      options: [...prev.options, { label: '', color: PRESET_COLORS[prev.options.length % PRESET_COLORS.length] }],
+      options: [...prev.options, {
+        label: `Option ${prev.options.length + 1}`,
+        color: PRESET_COLORS[prev.options.length % PRESET_COLORS.length],
+      }],
     }))
   }
 
@@ -123,17 +274,12 @@ export default function TableSettingsPage() {
   const handleAddField = async () => {
     if (!id) return
     setFieldError('')
-    if (!newField.fieldName.trim()) {
-      setFieldError('Field name is required')
-      return
-    }
+    if (!newField.fieldName.trim()) { setFieldError('Field name is required'); return }
     if (newField.fieldType === 'dropdown' && newField.options.length === 0) {
-      setFieldError('Dropdown fields must have at least one option')
-      return
+      setFieldError('Dropdown fields must have at least one option'); return
     }
     if (newField.fieldType === 'dropdown' && newField.options.some((o) => !o.label.trim())) {
-      setFieldError('All dropdown options must have a label')
-      return
+      setFieldError('All dropdown options must have a label'); return
     }
 
     setIsAddingField(true)
@@ -143,14 +289,7 @@ export default function TableSettingsPage() {
         prev ? { ...prev, fields: [...prev.fields, res.data.data] } : prev
       )
       setShowAddField(false)
-      setNewField({
-        fieldName: '',
-        fieldType: 'text',
-        required: false,
-        isStockField: false,
-        lowStockThreshold: null,
-        options: [],
-      })
+      setNewField({ fieldName: '', fieldType: 'text', required: false, isStockField: false, lowStockThreshold: null, options: [] })
       showToast('Field added successfully')
     } catch (err: any) {
       setFieldError(err.response?.data?.error || 'Failed to add field')
@@ -159,17 +298,7 @@ export default function TableSettingsPage() {
     }
   }
 
-  const handleUpdateField = async (fieldId: string, updates: any) => {
-    if (!id) return
-    const res = await tablesApi.updateField(id, fieldId, updates)
-    setTable((prev) =>
-      prev
-        ? { ...prev, fields: prev.fields.map((f) => f.id === fieldId ? res.data.data : f) }
-        : prev
-    )
-    showToast('Field updated successfully')
-  }
-
+  // ─── Delete field ─────────────────────────────────────────────────────────
   const handleDeleteField = async () => {
     if (!id || !confirmField) return
     setDeletingFieldId(confirmField.id)
@@ -187,19 +316,25 @@ export default function TableSettingsPage() {
     }
   }
 
+  // ─── Update field ─────────────────────────────────────────────────────────
+  const handleUpdateField = async (fieldId: string, updates: any) => {
+    if (!id) return
+    const res = await tablesApi.updateField(id, fieldId, updates)
+    setTable((prev) =>
+      prev ? { ...prev, fields: prev.fields.map((f) => f.id === fieldId ? res.data.data : f) } : prev
+    )
+    showToast('Field updated successfully')
+  }
+
+  // ─── Delete table ─────────────────────────────────────────────────────────
   const handleDeleteTable = async () => {
     try {
       await tablesApi.delete(id!)
       triggerTableRefresh()
-      showToast('Table deleted successfully')
+      showToast('Table deleted')
       navigate('/dashboard')
-    } catch (err: any) {
-      const message = err.response?.data?.error || ''
-      if (message.includes('record')) {
-        showToast('Cannot delete table when there is data', 'error')
-      } else {
-        showToast('Server error — please try again', 'error')
-      }
+    } catch (error: any) {
+      showToast(error.response?.data?.error || 'Failed to delete table', 'error')
     } finally {
       setShowDeleteModal(false)
     }
@@ -261,7 +396,7 @@ export default function TableSettingsPage() {
 
       {/* Fields */}
       <div className="bg-white dark:bg-[#1a1d2e] rounded-xl border border-gray-100 dark:border-[#2a2d3e] shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Fields</h2>
           <button
             onClick={() => setShowAddField(true)}
@@ -271,68 +406,24 @@ export default function TableSettingsPage() {
             Add Field
           </button>
         </div>
+        <p className="text-xs text-gray-400 mb-3">Drag the grip handle to reorder fields</p>
 
-        {/* Fields grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {table.fields.map((field) => (
-            <div
-              key={field.id}
-              className="flex items-center justify-between p-3 bg-gray-50 dark:bg-[#0f1117] rounded-lg border border-gray-100 dark:border-[#2a2d3e]"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {field.fieldName}
-                  </p>
-                  {field.required && <span className="text-xs text-red-500">required</span>}
-                  {field.isStockField && (
-                    <span className="text-xs text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-full">
-                      stock
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="text-xs text-gray-400 capitalize">{field.fieldType}</span>
-                  {field.fieldType === 'dropdown' && field.options && (
-                    <div className="flex items-center gap-1 flex-wrap mt-1">
-                      {(field.options as DropdownOption[]).map((opt) => (
-                        <span
-                          key={opt.label}
-                          className="text-xs px-1.5 py-0.5 rounded-full font-medium"
-                          style={{
-                            backgroundColor: `${opt.color}25`,
-                            color: opt.color,
-                            border: `1px solid ${opt.color}50`,
-                          }}
-                        >
-                          {opt.label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-1 shrink-0 ml-2">
-                <button
-                  onClick={() => setEditingField(field)}
-                  className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
-                  title="Edit field"
-                >
-                  <Pencil size={13} />
-                </button>
-                <button
-                  onClick={() => setConfirmField(field)}
-                  disabled={deletingFieldId === field.id}
-                  className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 shrink-0 ml-2"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
+        {/* Draggable fields list */}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={table.fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {table.fields.map((field) => (
+                <SortableField
+                  key={field.id}
+                  field={field}
+                  onEdit={setEditingField}
+                  onDelete={setConfirmField}
+                  deletingFieldId={deletingFieldId}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
 
         {/* Add Field Form */}
         {showAddField && (
@@ -344,7 +435,6 @@ export default function TableSettingsPage() {
               </button>
             </div>
 
-            {/* Field name + type */}
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -355,12 +445,7 @@ export default function TableSettingsPage() {
               />
               <select
                 value={newField.fieldType}
-                onChange={(e) => setNewField({
-                  ...newField,
-                  fieldType: e.target.value as any,
-                  isStockField: false,
-                  options: [],
-                })}
+                onChange={(e) => setNewField({ ...newField, fieldType: e.target.value as any, isStockField: false, options: [] })}
                 className="px-2 py-1.5 text-sm border border-gray-200 dark:border-[#2a2d3e] rounded-lg bg-white dark:bg-[#1a1d2e] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="text">Text</option>
@@ -371,7 +456,6 @@ export default function TableSettingsPage() {
               </select>
             </div>
 
-            {/* Checkboxes */}
             <div className="flex items-center gap-4 text-xs">
               <label className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 cursor-pointer">
                 <input
@@ -428,18 +512,11 @@ export default function TableSettingsPage() {
                     />
                     <span
                       className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
-                      style={{
-                        backgroundColor: `${option.color}25`,
-                        color: option.color,
-                        border: `1px solid ${option.color}50`,
-                      }}
+                      style={{ backgroundColor: `${option.color}25`, color: option.color, border: `1px solid ${option.color}50` }}
                     >
                       {option.label || 'Preview'}
                     </span>
-                    <button
-                      onClick={() => removeOption(optIdx)}
-                      className="text-gray-400 hover:text-red-500 transition-colors shrink-0"
-                    >
+                    <button onClick={() => removeOption(optIdx)} className="text-gray-400 hover:text-red-500 transition-colors shrink-0">
                       <X size={13} />
                     </button>
                   </div>
@@ -450,29 +527,21 @@ export default function TableSettingsPage() {
                       key={color}
                       onClick={() => setNewField((prev) => ({
                         ...prev,
-                        options: [...prev.options, {
-                          label: `Option ${prev.options.length + 1}`,
-                          color,
-                        }],
+                        options: [...prev.options, { label: `Option ${prev.options.length + 1}`, color }],
                       }))}
                       className="w-5 h-5 rounded-full border-2 border-white dark:border-gray-700 shadow-sm hover:scale-110 transition-transform"
                       style={{ backgroundColor: color }}
                       title="Add option with this color"
                     />
                   ))}
-                  <button
-                    onClick={addOption}
-                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium ml-1"
-                  >
+                  <button onClick={addOption} className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium ml-1">
                     + Add option
                   </button>
                 </div>
               </div>
             )}
 
-            {fieldError && (
-              <p className="text-red-500 text-xs">{fieldError}</p>
-            )}
+            {fieldError && <p className="text-red-500 text-xs">{fieldError}</p>}
 
             <button
               onClick={handleAddField}
@@ -499,46 +568,16 @@ export default function TableSettingsPage() {
         </button>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', backgroundColor: 'rgba(0,0,0,0.5)' }}
-        >
-          <div className="bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-red-100 dark:bg-red-900/30 p-2.5 rounded-xl shrink-0">
-                <Trash2 size={18} className="text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                  Delete "{table?.name}"?
-                </h2>
-                <p className="text-xs text-gray-400 mt-0.5">This action cannot be undone.</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Are you sure you want to delete this table? All field definitions will be permanently removed.
-            </p>
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteTable}
-                className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-              >
-                Yes, Delete
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
       {/* Delete Field Modal */}
+      {confirmField && (
+        <ConfirmModal
+          title={`Delete "${confirmField.fieldName}"?`}
+          message="This will permanently remove the field. All data in this column will be lost."
+          confirmLabel="Delete Field"
+          onConfirm={handleDeleteField}
+          onClose={() => setConfirmField(null)}
+        />
+      )}
 
       {/* Edit Field Modal */}
       {editingField && (
@@ -549,14 +588,40 @@ export default function TableSettingsPage() {
         />
       )}
 
-      {confirmField && (
-        <ConfirmModal
-          title={`Delete "${confirmField.fieldName}"?`}
-          message="This will permanently remove the field. All data in this column will be lost."
-          confirmLabel="Delete Field"
-          onConfirm={handleDeleteField}
-          onClose={() => setConfirmField(null)}
-        />
+      {/* Delete Table Modal */}
+      {showDeleteModal && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-red-100 dark:bg-red-900/30 p-2.5 rounded-xl shrink-0">
+                <Trash2 size={18} className="text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Delete "{table?.name}"?</h2>
+                <p className="text-xs text-gray-400 mt-0.5">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              All rows, fields, and data will be permanently removed.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleDeleteTable} className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )

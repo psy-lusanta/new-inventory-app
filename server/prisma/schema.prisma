@@ -50,6 +50,7 @@ model User {
   activityLogs ActivityLog[]
   failedLoginAttempts Int      @default(0)
   lockedUntil         DateTime?
+  notifications Notification[]
 }
 
 model InventoryTable {
@@ -190,4 +191,20 @@ model ActivityLog {
   @@index([createdAt])
   @@index([action])
   @@index([entityType])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   @default("info") 
+  isRead    Boolean  @default(false)
+  link      String?  
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
 }

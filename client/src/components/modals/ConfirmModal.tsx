@@ -3,7 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 
 interface Props {
   title: string
-  message: string
+  message: React.ReactNode
   confirmLabel?: string
   isDestructive?: boolean
   onConfirm: () => void

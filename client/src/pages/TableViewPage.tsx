@@ -18,6 +18,7 @@ import RowDetailModal from "../components/modals/RowDetailModal";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import ConfirmModal from '../components/modals/ConfirmModal'
+import { SkeletonTable } from '../components/ui/Skeleton'
 
 interface Field {
   id: string;
@@ -235,11 +236,11 @@ export default function TableViewPage() {
   // ─── Delete row ───────────────────────────────────────────────────────────
   const handleDelete = async (rowId: string) => {
     if (!id) return;
-    if (!confirm("Are you sure you want to delete this row?")) return;
     setDeletingId(rowId);
     try {
       await rowsApi.delete(id, rowId);
       setRows((prev) => prev.filter((r) => r.id !== rowId));
+      setConfirmDeleteRowId(null);
       showToast("Row deleted successfully", "success");
     } catch (error) {
       console.error("Failed to delete row:", error);
@@ -266,7 +267,26 @@ export default function TableViewPage() {
     const value = formData[field.fieldName] ?? "";
     const baseClass =
       "w-full px-3 py-2 text-sm border border-gray-200 dark:border-[#2a2d3e] rounded-lg bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500";
+    const isCost = field.fieldName.toLowerCase() === 'cost'
 
+    switch (field.fieldType) {
+      case 'number':
+        return (
+          <div className="relative">
+            {isCost && (
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">₱</span>
+            )}
+            <input
+              type="number"
+              value={value}
+              onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value === '' ? '' : Number(e.target.value) })}
+              className={`${baseClass} ${isCost ? 'pl-7' : ''}`}
+              min={isCost ? '0' : undefined}
+              step={isCost ? '0.01' : undefined}
+            />
+          </div>
+        )
+    }
     switch (field.fieldType) {
       case "number":
         return (
@@ -341,51 +361,56 @@ export default function TableViewPage() {
 
   // ─── Render cell value ────────────────────────────────────────────────────
   const renderCellValue = (field: Field, value: any) => {
-    if (value === undefined || value === null || value === "") {
-      return <span className="text-gray-300 dark:text-gray-600">—</span>;
+    if (value === undefined || value === null || value === '') {
+      return <span className="text-gray-300 dark:text-gray-600">—</span>
     }
-    if (field.fieldType === "boolean") {
+
+    // Cost field — show in green with PHP currency
+    if (field.fieldName.toLowerCase() === 'cost' && field.fieldType === 'number') {
+      const num = Number(value)
+      if (!isNaN(num)) {
+        return (
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+            {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(num)}
+          </span>
+        )
+      }
+    }
+
+    if (field.fieldType === 'boolean') {
       return (
-        <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full ${value === true || value === "true"
-            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-            }`}
-        >
-          {value === true || value === "true" ? "Yes" : "No"}
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${value === true || value === 'true'
+          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+          }`}>
+          {value === true || value === 'true' ? 'Yes' : 'No'}
         </span>
-      );
+      )
     }
+
     if (field.isStockField) {
-      const isLow =
-        field.lowStockThreshold !== null &&
-        Number(value) <= field.lowStockThreshold;
+      const isLow = field.lowStockThreshold !== null && Number(value) <= field.lowStockThreshold
       return (
         <div className="flex items-center gap-1.5">
-          <span
-            className={
-              isLow ? "text-red-600 dark:text-red-400 font-semibold" : ""
-            }
-          >
-            {value}
-          </span>
+          <span className={isLow ? 'text-red-600 dark:text-red-400 font-semibold' : ''}>{value}</span>
           {isLow && <AlertTriangle size={13} className="text-red-500" />}
         </div>
-      );
-    }
-    if (field.fieldType === "date" && value) {
-      return new Date(value).toLocaleDateString();
-    }
-    if (field.fieldType === 'dropdown' && field.options) {
-      const option = (field.options as any[]).find(
-        (o: any) => o.label === value
       )
+    }
+
+    if (field.fieldType === 'date' && value) {
+      return new Date(value).toLocaleDateString()
+    }
+
+    if (field.fieldType === 'dropdown' && field.options) {
+      const options = field.options as { label: string; color: string }[]
+      const option = options.find((o) => o.label === String(value))
       if (option) {
         return (
           <span
-            className="text-xs font-medium px-2 py-0.5 rounded-full"
+            className="inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full"
             style={{
-              backgroundColor: `${option.color}25`,
+              backgroundColor: `${option.color}20`,
               color: option.color,
               border: `1px solid ${option.color}50`,
             }}
@@ -394,10 +419,11 @@ export default function TableViewPage() {
           </span>
         )
       }
-      return String(value)
+      return <span className="text-gray-500">{String(value)}</span>
     }
-    return String(value);
-  };
+
+    return String(value)
+  }
 
   const columnPickerRef = useRef<HTMLDivElement>(null);
   const columnDropdownRef = useRef<HTMLDivElement>(null);
@@ -424,10 +450,12 @@ export default function TableViewPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400 text-sm">Loading...</p>
+      <div className="p-4 sm:p-6 space-y-4">
+        <div className="h-8 bg-gray-200 dark:bg-[#2a2d3e] rounded w-48 animate-pulse" />
+        <div className="h-4 bg-gray-200 dark:bg-[#2a2d3e] rounded w-24 animate-pulse" />
+        <SkeletonTable />
       </div>
-    );
+    )
   }
 
   if (!table) {
@@ -611,7 +639,7 @@ export default function TableViewPage() {
                             <Pencil size={14} />
                           </button>
                           <button
-                            onClick={() => handleDelete(row.id)}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteRowId(row.id) }}
                             disabled={deletingId === row.id}
                             className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
                           >
@@ -633,7 +661,6 @@ export default function TableViewPage() {
         <div
           className="custom-scrollbar fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4"
           style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', backgroundColor: 'rgba(0,0,0,0.6)' }}
-          onClick={closeModal}
         >
           <div
             className="bg-white dark:bg-[#1a1d2e] rounded-none sm:rounded-2xl shadow-xl w-full h-full sm:h-auto sm:max-w-md sm:max-h-[90vh] flex flex-col"
@@ -848,6 +875,18 @@ export default function TableViewPage() {
           fields={table.fields}
           tableName={table.name}
           onClose={() => setSelectedRow(null)}
+        />,
+        document.body
+      )}
+
+      {/* ------ Delete Modal ------ */}
+      {confirmDeleteRowId && createPortal(
+        <ConfirmModal
+          title="Delete Row"
+          message="Are you sure you want to delete this row? This cannot be undone."
+          confirmLabel="Delete Row"
+          onConfirm={() => handleDelete(confirmDeleteRowId)}
+          onClose={() => setConfirmDeleteRowId(null)}
         />,
         document.body
       )}
