@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Search, X, ArrowRight, Sun, Moon, Plus, Settings, LogOut, ChevronDown, Menu } from 'lucide-react'
+import { Search, X, ArrowRight, Sun, Moon, Plus, User, Lock, LogOut, ChevronDown, Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { reportsApi } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
@@ -231,18 +231,25 @@ export default function Navbar() {
                 </p>
                 <p className="text-xs text-gray-400 truncate">{user?.email}</p>
               </div>
-              <div className="p-1">
+              <div className="py-1">
+                <button
+                  onClick={() => { setShowUserMenu(false); navigate('/settings') }}
+                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3e] transition-colors"
+                >
+                  <User size={15} />
+                  Profile Settings
+                </button>
                 <button
                   onClick={() => { setShowUserMenu(false); setShowChangePassword(true) }}
-                  className="flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3e] rounded-lg transition-colors"
+                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3e] transition-colors"
                 >
-                  <Settings size={15} />
+                  <Lock size={15} />
                   Change Password
                 </button>
-
+                <div className="my-1 border-t border-gray-100 dark:border-[#2a2d3e]" />
                 <button
                   onClick={logout}
-                  className="flex items-center gap-3 w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                 >
                   <LogOut size={15} />
                   Logout

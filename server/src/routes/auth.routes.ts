@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { login, logout, getMe, getUsers, createUser, resetPassword, deleteUser, changeOwnPassword } from '../controllers/auth.controller'
+import { login, logout, getMe, getUsers, createUser, resetPassword, deleteUser, changeOwnPassword, updateOwnProfile } from '../controllers/auth.controller'
 import { authenticate, requireAdmin } from '../middleware/auth.middleware'
 import { validate } from '../lib/validate'
 import { loginSchema, createUserSchema, resetPasswordSchema } from '../lib/schemas'
@@ -14,5 +14,6 @@ router.post('/users', authenticate, requireAdmin, validate(createUserSchema), cr
 router.patch('/users/:userId/reset-password', authenticate, requireAdmin, validate(resetPasswordSchema), resetPassword)
 router.post('/change-password', authenticate, changeOwnPassword)
 router.delete('/users/:userId', authenticate, requireAdmin, deleteUser)
+router.patch('/profile', authenticate, updateOwnProfile)
 
 export default router

@@ -216,14 +216,12 @@ export default function TableSettingsPage() {
     const reordered = arrayMove(table.fields, oldIndex, newIndex)
     const previousFields = table.fields
 
+    // Optimistic update — show new order immediately
     setTable({ ...table, fields: reordered })
 
     try {
-      await Promise.all(
-        reordered.map((field, index) =>
-          tablesApi.updateField(id!, field.id, { order: index })
-        )
-      )
+      // ✅ CORRECT — use reorderFields with just the IDs in order
+      await tablesApi.reorderFields(id!, reordered.map((f) => f.id))
       showToast('Field order saved')
     } catch {
       showToast('Failed to save order', 'error')

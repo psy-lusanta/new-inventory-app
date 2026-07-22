@@ -137,14 +137,13 @@ model PafForm {
   date         String
   position     String?
   deptBranch   String?
-  status       String   @default("draft") // draft, finalized
+  status       String   @default("draft")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  deletedAt    DateTime?
 
-  createdBy   String
-  user        User     @relation(fields: [createdBy], references: [id])
-  items       PafItem[]
+  createdBy    String
+  user         User      @relation(fields: [createdBy], references: [id])
+  items        PafItem[]
 
   @@index([createdAt])
   @@index([createdBy])
@@ -175,17 +174,17 @@ model PafCounter {
 
 model ActivityLog {
   id         String   @id @default(uuid())
-  action     String   
-  entityType String   
+  action     String
+  entityType String
   entityId   String?
   entityName String?
   tableName  String?
-  details    Json?    
+  details    Json?
   ipAddress  String?
   createdAt  DateTime @default(now())
 
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade) // ← add onDelete: Cascade
 
   @@index([userId])
   @@index([createdAt])
@@ -197,13 +196,13 @@ model Notification {
   id        String   @id @default(uuid())
   title     String
   message   String
-  type      String   @default("info") 
+  type      String   @default("info")
   isRead    Boolean  @default(false)
-  link      String?  
+  link      String?
   createdAt DateTime @default(now())
 
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) // ← add onDelete: Cascade
 
   @@index([userId, isRead])
   @@index([createdAt])

@@ -42,13 +42,13 @@ export default function NotificationBell() {
       const res = await notificationsApi.getAll()
       setNotifications(res.data.data.notifications)
       setUnreadCount(res.data.data.unreadCount)
-    } catch {}
+    } catch { }
   }
 
   useEffect(() => {
     fetchNotifications()
-    // Poll every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000)
+    // Poll every 15 seconds
+    const interval = setInterval(fetchNotifications, 15000)
     return () => clearInterval(interval)
   }, [])
 
@@ -93,13 +93,18 @@ export default function NotificationBell() {
     }
   }
 
+  const handleOpen = () => {
+    setIsOpen((p) => !p)
+    if (!isOpen) fetchNotifications()
+  }
+
   const buttonRect = buttonRef.current?.getBoundingClientRect()
 
   return (
     <>
       <button
         ref={buttonRef}
-        onClick={() => setIsOpen((p) => !p)}
+        onClick={handleOpen}
         className="relative p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] transition-colors"
       >
         <Bell size={18} />
@@ -157,9 +162,8 @@ export default function NotificationBell() {
                   <div
                     key={notif.id}
                     onClick={() => handleClick(notif)}
-                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-[#0f1117] transition-colors ${
-                      !notif.isRead ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
-                    }`}
+                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-[#0f1117] transition-colors ${!notif.isRead ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
+                      }`}
                   >
                     <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${TYPE_STYLES[notif.type]}`}>
                       <Icon size={13} />

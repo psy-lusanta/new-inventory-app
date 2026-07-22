@@ -199,39 +199,36 @@ export default function TableViewPage() {
 
   // ─── Save row ─────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!id || !table) return;
-    setFormError("");
+    if (!id || !table) return
+    setFormError('')
 
     for (const field of table.fields) {
       if (
         field.required &&
-        (formData[field.fieldName] === undefined ||
-          formData[field.fieldName] === "")
+        (formData[field.fieldName] === undefined || formData[field.fieldName] === '')
       ) {
-        setFormError(`"${field.fieldName}" is required`);
-        return;
+        setFormError(`"${field.fieldName}" is required`)
+        return
       }
     }
 
-    setIsSaving(true);
+    setIsSaving(true)
     try {
       if (editingRow) {
-        const res = await rowsApi.update(id, editingRow.id, formData);
-        setRows((prev) =>
-          prev.map((r) => (r.id === editingRow.id ? res.data.data : r)),
-        );
+        const res = await rowsApi.update(id, editingRow.id, formData)
+        setRows((prev) => prev.map((r) => (r.id === editingRow.id ? res.data.data : r)))
       } else {
-        const res = await rowsApi.create(id, formData);
-        setRows((prev) => [res.data.data, ...prev]);
+        const res = await rowsApi.create(id, formData)
+        setRows((prev) => [...prev, res.data.data]) // ← append to bottom (asc)
       }
-      closeModal();
-      showToast("Row saved successfully", "success");
+      closeModal()
+      showToast('Row saved successfully')
     } catch (err: any) {
-      setFormError(err.response?.data?.error || "Failed to save row");
+      setFormError(err.response?.data?.error || 'Failed to save row')
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
-  };
+  }
 
   // ─── Delete row ───────────────────────────────────────────────────────────
   const handleDelete = async (rowId: string) => {
@@ -264,9 +261,9 @@ export default function TableViewPage() {
 
   // ─── Render field input ───────────────────────────────────────────────────
   const renderInput = (field: Field) => {
-    const value = formData[field.fieldName] ?? "";
+    const value = formData[field.fieldName] ?? ''
     const baseClass =
-      "w-full px-3 py-2 text-sm border border-gray-200 dark:border-[#2a2d3e] rounded-lg bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500";
+      'w-full px-3 py-2 text-sm border border-gray-200 dark:border-[#2a2d3e] rounded-lg bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500'
     const isCost = field.fieldName.toLowerCase() === 'cost'
 
     switch (field.fieldType) {
@@ -274,62 +271,50 @@ export default function TableViewPage() {
         return (
           <div className="relative">
             {isCost && (
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">₱</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
+                ₱
+              </span>
             )}
             <input
               type="number"
               value={value}
-              onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value === '' ? '' : Number(e.target.value) })}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  [field.fieldName]: e.target.value === '' ? '' : Number(e.target.value),
+                })
+              }
               className={`${baseClass} ${isCost ? 'pl-7' : ''}`}
               min={isCost ? '0' : undefined}
               step={isCost ? '0.01' : undefined}
             />
           </div>
         )
-    }
-    switch (field.fieldType) {
-      case "number":
-        return (
-          <input
-            type="number"
-            value={value}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                [field.fieldName]:
-                  e.target.value === "" ? "" : Number(e.target.value),
-              })
-            }
-            className={baseClass}
-          />
-        );
-      case "date":
+
+      case 'date':
         return (
           <input
             type="date"
             value={value}
-            onChange={(e) =>
-              setFormData({ ...formData, [field.fieldName]: e.target.value })
-            }
+            onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value })}
             className={baseClass}
           />
-        );
-      case "boolean":
+        )
+
+      case 'boolean':
         return (
           <select
-            value={value === true || value === "true" ? "true" : "false"}
+            value={value === true || value === 'true' ? 'true' : 'false'}
             onChange={(e) =>
-              setFormData({
-                ...formData,
-                [field.fieldName]: e.target.value === "true",
-              })
+              setFormData({ ...formData, [field.fieldName]: e.target.value === 'true' })
             }
             className={baseClass}
           >
             <option value="true">Yes</option>
             <option value="false">No</option>
           </select>
-        );
+        )
+
       case 'dropdown':
         return (
           <select
@@ -338,26 +323,25 @@ export default function TableViewPage() {
             className={baseClass}
           >
             <option value="">Select an option...</option>
-            {((field as any).options ?? []).map((opt: any) => (
+            {(field.options ?? []).map((opt) => (
               <option key={opt.label} value={opt.label}>
                 {opt.label}
               </option>
             ))}
           </select>
-        );
+        )
+
       default:
         return (
           <input
             type="text"
             value={value}
-            onChange={(e) =>
-              setFormData({ ...formData, [field.fieldName]: e.target.value })
-            }
+            onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value })}
             className={baseClass}
           />
-        );
+        )
     }
-  };
+  }
 
   // ─── Render cell value ────────────────────────────────────────────────────
   const renderCellValue = (field: Field, value: any) => {

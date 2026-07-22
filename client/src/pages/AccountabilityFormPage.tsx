@@ -205,7 +205,7 @@ export default function AccountabilityFormPage() {
       setForm((prev) => ({
         ...prev,
         items: updatedItems,
-        employeeName: prev.employeeName || find('accountableuser', 'accountable', 'employee', 'name', 'assignedto'),
+        employeeName: prev.employeeName || find('accountableuser', 'accountable', 'employee', 'name', 'assignedto', 'currentuser'),
         position: prev.position || find('position', 'designation', 'jobtitle'),
         deptBranch: prev.deptBranch || find('department', 'dept', 'branch', 'division'),
       }))
@@ -291,8 +291,10 @@ export default function AccountabilityFormPage() {
     try {
       await pafApi.deleteForm(deleteTarget.id)
       showToast('Form deleted')
-      if (activeFormId === deleteTarget.id) handleNewForm()
-      fetchForms()
+      await fetchForms()
+      if (activeFormId === deleteTarget.id) {
+        await handleNewForm()
+      }
     } catch {
       showToast('Failed to delete', 'error')
     } finally {
@@ -368,8 +370,17 @@ export default function AccountabilityFormPage() {
                 >
                   <option value="">{isLoadingRows ? 'Loading...' : 'Pick row to fill...'}</option>
                   {rows.map((row) => {
-                    const firstValue = Object.values(row.data)[0]
-                    return <option key={row.id} value={row.id}>{firstValue ? String(firstValue) : row.id.slice(0, 8)}</option>
+                    const selectedTable = tables.find((t) => t.id === selectedTableId)
+                    const sortedFields = selectedTable
+                      ? [...(selectedTable.fields ?? [])].sort((a, b) => a.order - b.order)
+                      : []
+                    const firstField = sortedFields[0]
+                    const firstValue = firstField ? row.data[firstField.fieldName] : null
+                    return (
+                      <option key={row.id} value={row.id}>
+                        {firstValue ? String(firstValue) : row.id.slice(0, 8)}
+                      </option>
+                    )
                   })}
                 </select>
               )}
@@ -511,18 +522,21 @@ export default function AccountabilityFormPage() {
                           >
                             <option value="">↓</option>
                             {rows.map((row) => {
-                              const firstValue = Object.values(row.data)[0]
-                              return <option key={row.id} value={row.id}>{firstValue ? String(firstValue).slice(0, 8) : row.id.slice(0, 6)}</option>
+                              // Get the selected table's fields sorted by order
+                              const selectedTable = tables.find((t) => t.id === selectedTableId)
+                              const sortedFields = selectedTable
+                                ? [...(selectedTable.fields ?? [])].sort((a, b) => a.order - b.order)
+                                : []
+                              // Use first field's value instead of arbitrary Object.values()[0]
+                              const firstField = sortedFields[0]
+                              const firstValue = firstField ? row.data[firstField.fieldName] : null
+                              return (
+                                <option key={row.id} value={row.id}>
+                                  {firstValue ? String(firstValue).slice(0, 12) : row.id.slice(0, 6)}
+                                </option>
+                              )
                             })}
                           </select>
-                        )}
-                        {form.items.length > 1 && (
-                          <button
-                            onClick={() => removeItem(index)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '1px', fontSize: '10px' }}
-                          >
-                            ×
-                          </button>
                         )}
                       </div>
                     </td>

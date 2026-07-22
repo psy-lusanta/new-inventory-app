@@ -3,29 +3,45 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware'
 import prisma from '../lib/prisma'
 
 const DEPT = 'ICT'
+const getYear = () => new Date().getFullYear().toString().slice(2)
 
-// ─── Get next PAF number (peek without incrementing) ──────────────────────────
+// ─── Reset counter to match actual active form count ──────────────────────────
+const syncCounter = async (year: string) => {
+  const activeCount = await prisma.pafForm.count({
+    where: { pafNo: { startsWith: `${DEPT}-${year}-` } },
+  })
+  await prisma.pafCounter.upsert({
+    where: { dept_year: { dept: DEPT, year } },
+    update: { counter: activeCount },
+    create: { dept: DEPT, year, counter: activeCount },
+  })
+}
+
+// ─── Get next PAF number ──────────────────────────────────────────────────────
 export const getNextPafNo = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const year = new Date().getFullYear().toString().slice(2)
+    const year = getYear()
+
+    // Always sync counter with actual DB state
+    await syncCounter(year)
+
     const counter = await prisma.pafCounter.findUnique({
       where: { dept_year: { dept: DEPT, year } },
     })
     const next = (counter?.counter ?? 0) + 1
     const pafNo = `${DEPT}-${year}-${String(next).padStart(3, '0')}`
-    res.json({ success: true, data: { pafNo, next } })
+    res.json({ success: true, data: { pafNo } })
   } catch (error) {
     console.error('GetNextPafNo error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 }
 
-// ─── Get all PAF forms (excluding soft-deleted) ───────────────────────────────
+// ─── Get all PAF forms ────────────────────────────────────────────────────────
 export const getForms = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const forms = await prisma.pafForm.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'asc' }, // oldest first so tabs are in order
+      orderBy: { createdAt: 'asc' },
       include: {
         user: { select: { id: true, name: true } },
         items: { orderBy: { order: 'asc' } },
@@ -42,8 +58,8 @@ export const getForms = async (req: AuthenticatedRequest, res: Response) => {
 export const getForm = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params
-    const form = await prisma.pafForm.findFirst({
-      where: { id, deletedAt: null },
+    const form = await prisma.pafForm.findUnique({
+      where: { id },
       include: {
         user: { select: { id: true, name: true } },
         items: { orderBy: { order: 'asc' } },
@@ -60,47 +76,29 @@ export const getForm = async (req: AuthenticatedRequest, res: Response) => {
   }
 }
 
-// ─── Create PAF form (increments counter atomically) ─────────────────────────
+// ─── Create PAF form ──────────────────────────────────────────────────────────
 export const createForm = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id
-    const { pafNo: customPafNo, employeeName, contactNo, address, date, position, deptBranch, items } = req.body
+    const { employeeName, contactNo, address, date, position, deptBranch, items } = req.body
 
     if (!employeeName?.trim()) {
       res.status(400).json({ success: false, error: 'Employee name is required' })
       return
     }
 
-    const year = new Date().getFullYear().toString().slice(2)
+    const year = getYear()
 
-    // If user edited the PAF no manually, use that — otherwise auto-generate
-    let pafNo = customPafNo?.trim()
+    // Sync counter before generating number
+    await syncCounter(year)
 
-    if (!pafNo) {
-      const counter = await prisma.pafCounter.upsert({
-        where: { dept_year: { dept: DEPT, year } },
-        update: { counter: { increment: 1 } },
-        create: { dept: DEPT, year, counter: 1 },
-      })
-      pafNo = `${DEPT}-${year}-${String(counter.counter).padStart(3, '0')}`
-    } else {
-      // User provided a custom PAF no — still increment the counter
-      // so next auto-generated one doesn't collide
-      await prisma.pafCounter.upsert({
-        where: { dept_year: { dept: DEPT, year } },
-        update: { counter: { increment: 1 } },
-        create: { dept: DEPT, year, counter: 1 },
-      })
-    }
-
-    // Check for duplicate PAF number
-    const existing = await prisma.pafForm.findFirst({
-      where: { pafNo, deletedAt: null },
+    const counter = await prisma.pafCounter.upsert({
+      where: { dept_year: { dept: DEPT, year } },
+      update: { counter: { increment: 1 } },
+      create: { dept: DEPT, year, counter: 1 },
     })
-    if (existing) {
-      res.status(400).json({ success: false, error: `PAF number ${pafNo} already exists` })
-      return
-    }
+
+    const pafNo = `${DEPT}-${year}-${String(counter.counter).padStart(3, '0')}`
 
     const form = await prisma.pafForm.create({
       data: {
@@ -132,7 +130,7 @@ export const createForm = async (req: AuthenticatedRequest, res: Response) => {
     res.status(201).json({ success: true, data: form })
   } catch (error: any) {
     if (error.code === 'P2002') {
-      res.status(400).json({ success: false, error: 'PAF number already exists' })
+      res.status(400).json({ success: false, error: 'PAF number conflict — please try again' })
       return
     }
     console.error('CreateForm error:', error)
@@ -151,24 +149,27 @@ export const updateForm = async (req: AuthenticatedRequest, res: Response) => {
       return
     }
 
-    // Check if PAF no is being changed to one that already exists
-    if (pafNo) {
-      const existing = await prisma.pafForm.findFirst({
-        where: { pafNo, deletedAt: null, id: { not: id } },
-      })
-      if (existing) {
+    const currentForm = await prisma.pafForm.findUnique({ where: { id } })
+    if (!currentForm) {
+      res.status(404).json({ success: false, error: 'Form not found' })
+      return
+    }
+
+    // Check pafNo conflict only if it changed
+    if (pafNo && pafNo !== currentForm.pafNo) {
+      const conflict = await prisma.pafForm.findUnique({ where: { pafNo } })
+      if (conflict) {
         res.status(400).json({ success: false, error: `PAF number ${pafNo} already exists` })
         return
       }
     }
 
-    // Delete existing items and recreate
     await prisma.pafItem.deleteMany({ where: { formId: id } })
 
     const form = await prisma.pafForm.update({
       where: { id },
       data: {
-        ...(pafNo && { pafNo }),
+        pafNo: pafNo ?? currentForm.pafNo,
         employeeName: employeeName.trim(),
         contactNo: contactNo?.trim() ?? '',
         address: address?.trim() ?? '',
@@ -199,25 +200,24 @@ export const updateForm = async (req: AuthenticatedRequest, res: Response) => {
   }
 }
 
-// ─── Soft delete PAF form ─────────────────────────────────────────────────────
+// ─── Hard delete PAF form ─────────────────────────────────────────────────────
 export const deleteForm = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params
+    const year = getYear()
 
-    const form = await prisma.pafForm.findFirst({
-      where: { id, deletedAt: null },
-    })
-
+    const form = await prisma.pafForm.findUnique({ where: { id } })
     if (!form) {
       res.status(404).json({ success: false, error: 'Form not found' })
       return
     }
 
-    // Soft delete — keeps the PAF number in records, never reuses it
-    await prisma.pafForm.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    })
+    // Hard delete items first, then form
+    await prisma.pafItem.deleteMany({ where: { formId: id } })
+    await prisma.pafForm.delete({ where: { id } })
+
+    // Sync counter to reflect actual remaining count
+    await syncCounter(year)
 
     res.json({ success: true, data: { message: `Form ${form.pafNo} deleted` } })
   } catch (error) {

@@ -5,6 +5,15 @@ import { cache } from '../lib/cache'
 import { logActivity, LOG_ACTIONS } from '../lib/logger.activity'
 import { createNotification } from './notification.controller'
 
+// ─── Get user display name ────────────────────────────────────────────────────
+const getUserName = async (userId: string): Promise<string> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true },
+  })
+  return user?.name ?? 'Unknown User'
+}
+
 // ─── Helper: check unique fields ──────────────────────────────────────────────
 const checkUniqueFields = async (
   tableId: string,
@@ -198,18 +207,22 @@ export const createRow = async (req: AuthenticatedRequest, res: Response) => {
 
     // Notify all admins when a new row is added
     const admins = await prisma.user.findMany({
-      where: { role: 'admin', id: { not: userId } },
+      where: { role: 'admin' },
       select: { id: true },
     })
+
+    const actorName = await getUserName(userId)
+
     await Promise.all(admins.map((admin) =>
       createNotification(
         admin.id,
         'New Record Added',
-        `${req.user!.email} added a record to ${table.name}`,
+        `${actorName} added a record to ${table.name}`,
         'info',
         `/tables/${tableId}`
       )
     ))
+
     cache.invalidate('dashboard')
     cache.invalidatePattern('monthly')
     cache.invalidate('cost-stats')
@@ -309,8 +322,24 @@ export const updateRow = async (req: AuthenticatedRequest, res: Response) => {
       ipAddress: req.ip,
     })
 
-
     res.json({ success: true, data: { ...updated, updatedByUser } })
+
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin' },
+      select: { id: true },
+    })
+
+    const actorName = await getUserName(userId)
+    await Promise.all(admins.map((admin) =>
+      createNotification(
+        admin.id,
+        'Record Updated',
+        `${actorName} updated a record in ${table?.name ?? 'a table'}`,
+        'info',
+        `/tables/${tableId}`
+      )
+    ))
+
     cache.invalidate('dashboard')
   } catch (error) {
     console.error('UpdateRow error:', error)
@@ -321,7 +350,7 @@ export const updateRow = async (req: AuthenticatedRequest, res: Response) => {
 // ─── Delete row ───────────────────────────────────────────────────────────────
 export const deleteRow = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { rowId } = req.params
+    const { rowId, tableId } = req.params
 
     const rowToDelete = await prisma.inventoryRow.findUnique({
       where: { id: rowId },
@@ -346,6 +375,23 @@ export const deleteRow = async (req: AuthenticatedRequest, res: Response) => {
     await prisma.inventoryRow.delete({ where: { id: rowId } })
 
     res.json({ success: true, data: { message: 'Row deleted successfully' } })
+
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin' },
+      select: { id: true },
+    })
+    
+    const actorName = await getUserName((req as any).user.id)
+    await Promise.all(admins.map((admin) =>
+      createNotification(
+        admin.id,
+        'Record Deleted',
+        `${actorName} deleted a record from ${rowToDelete?.table.name ?? 'a table'}`,
+        'warning',
+        `/tables/${tableId}`
+      )
+    ))
+
   } catch (error) {
     console.error('DeleteRow error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })

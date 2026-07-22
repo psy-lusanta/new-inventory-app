@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import prisma from '../lib/prisma'
 import { logActivity, LOG_ACTIONS } from '../lib/logger.activity'
+import { AuthenticatedRequest } from 'src/middleware/auth.middleware'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret'
 
@@ -270,16 +271,36 @@ export const changeOwnPassword = async (req: Request, res: Response) => {
 }
 
 // ─── Delete user (admin only) ─────────────────────────────────────────────────
-export const deleteUser = async (req: Request, res: Response) => {
+export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { userId } = req.params
-    const requestingUserId = (req as any).user.id
+    const requestingUserId = req.user!.id
 
+    // Cannot delete yourself
     if (userId === requestingUserId) {
       res.status(400).json({ success: false, error: 'You cannot delete your own account' })
       return
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        _count: {
+          select: {
+            inventoryRows: true,
+            pafForms: true,
+          }
+        }
+      }
+    })
+
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' })
+      return
+    }
+
+    // Warn if user has data — but still allow deletion
+    // ActivityLogs and Notifications will cascade automatically
     await prisma.user.delete({ where: { id: userId } })
 
     await logActivity({
@@ -287,12 +308,66 @@ export const deleteUser = async (req: Request, res: Response) => {
       action: LOG_ACTIONS.DELETE_USER,
       entityType: 'user',
       entityId: userId,
+      entityName: user.email,
       ipAddress: req.ip,
     })
 
-    res.json({ success: true, data: { message: 'User deleted successfully' } })
+    res.json({
+      success: true,
+      data: {
+        message: `User "${user.name}" deleted successfully`,
+        rowsAffected: user._count.inventoryRows,
+      }
+    })
   } catch (error) {
     console.error('DeleteUser error:', error)
+    res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+}
+
+// ─── Update own profile (authenticated user only) ───────────────────────────────
+export const updateOwnProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.id
+    const { name, email } = req.body
+
+    if (!name?.trim()) {
+      res.status(400).json({ success: false, error: 'Name is required' })
+      return
+    }
+
+    if (!email?.trim()) {
+      res.status(400).json({ success: false, error: 'Email is required' })
+      return
+    }
+
+    // Check email not taken by another user
+    const existing = await prisma.user.findFirst({
+      where: { email: email.trim(), id: { not: userId } },
+    })
+    if (existing) {
+      res.status(400).json({ success: false, error: 'Email already in use by another account' })
+      return
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { name: name.trim(), email: email.trim() },
+      select: { id: true, name: true, email: true, role: true, mustChangePassword: true, createdAt: true },
+    })
+
+    await logActivity({
+      userId,
+      action: 'UPDATE_PROFILE',
+      entityType: 'user',
+      entityId: userId,
+      entityName: user.email,
+      ipAddress: req.ip,
+    })
+
+    res.json({ success: true, data: user })
+  } catch (error) {
+    console.error('UpdateOwnProfile error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 }

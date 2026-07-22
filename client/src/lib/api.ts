@@ -56,6 +56,8 @@ export const authApi = {
     api.delete(`/auth/users/${userId}`),
   changeOwnPassword: (currentPassword: string, newPassword: string) =>
     api.post('/auth/change-password', { currentPassword, newPassword }),
+  updateProfile: (data: { name: string; email: string }) =>
+    api.patch('/auth/profile', data),
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────────
@@ -73,6 +75,8 @@ export const tablesApi = {
     api.put(`/tables/${tableId}/fields/${fieldId}`, data),
   deleteField: (tableId: string, fieldId: string) =>
     api.delete(`/tables/${tableId}/fields/${fieldId}`),
+  reorderFields: (tableId: string, fieldIds: string[]) =>
+    api.put(`/tables/${tableId}/fields/reorder`, { fieldIds }),
 }
 
 // ─── Rows ─────────────────────────────────────────────────────────────────────
