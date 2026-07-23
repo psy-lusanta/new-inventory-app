@@ -211,11 +211,19 @@ export const createRow = async (req: AuthenticatedRequest, res: Response) => {
       select: { id: true },
     })
 
+    res.status(201).json({ success: true, data: row })
+
     const actorName = await getUserName(userId)
 
-    await Promise.all(admins.map((admin) =>
+    // Notify ALL other users (not just admins)
+    const otherUsers = await prisma.user.findMany({
+      where: { id: { not: userId } }, // everyone except who did the action
+      select: { id: true, role: true },
+    })
+
+    await Promise.all(otherUsers.map((u) =>
       createNotification(
-        admin.id,
+        u.id,
         'New Record Added',
         `${actorName} added a record to ${table.name}`,
         'info',
@@ -226,7 +234,6 @@ export const createRow = async (req: AuthenticatedRequest, res: Response) => {
     cache.invalidate('dashboard')
     cache.invalidatePattern('monthly')
     cache.invalidate('cost-stats')
-    res.status(201).json({ success: true, data: row })
   } catch (error) {
     console.error('CreateRow error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
@@ -330,9 +337,13 @@ export const updateRow = async (req: AuthenticatedRequest, res: Response) => {
     })
 
     const actorName = await getUserName(userId)
-    await Promise.all(admins.map((admin) =>
+    const otherUsers = await prisma.user.findMany({
+      where: { id: { not: userId } },
+      select: { id: true },
+    })
+    await Promise.all(otherUsers.map((u) =>
       createNotification(
-        admin.id,
+        u.id,
         'Record Updated',
         `${actorName} updated a record in ${table?.name ?? 'a table'}`,
         'info',
@@ -380,11 +391,15 @@ export const deleteRow = async (req: AuthenticatedRequest, res: Response) => {
       where: { role: 'admin' },
       select: { id: true },
     })
-    
+
     const actorName = await getUserName((req as any).user.id)
-    await Promise.all(admins.map((admin) =>
+    const otherUsers = await prisma.user.findMany({
+      where: { id: { not: (req as any).user.id } },
+      select: { id: true },
+    })
+    await Promise.all(otherUsers.map((u) =>
       createNotification(
-        admin.id,
+        u.id,
         'Record Deleted',
         `${actorName} deleted a record from ${rowToDelete?.table.name ?? 'a table'}`,
         'warning',

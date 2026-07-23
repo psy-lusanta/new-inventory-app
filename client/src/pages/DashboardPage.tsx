@@ -107,8 +107,6 @@ export default function DashboardPage() {
   const tileStorageKey = `dashboard-tiles-${user?.id}`
 
   // ────── Tile Picker  ─────────────────────────────────────────────────────────────────────
-  // `selectedTiles` = committed selection (used for rendering + persisted to localStorage)
-  // `draftTiles`    = working copy while the modal is open, discarded unless "Save" is pressed
   const [selectedTiles, setSelectedTiles] = useState<string[]>([])
   const [showTilePicker, setShowTilePicker] = useState(false)
   const [draftTiles, setDraftTiles] = useState<string[]>([])
@@ -127,7 +125,6 @@ export default function DashboardPage() {
     })
   }
 
-  // Commits the draft: this is the actual "Save" handler for the tile modal
   const handleSaveTiles = () => {
     setSelectedTiles(draftTiles)
     localStorage.setItem(tileStorageKey, JSON.stringify(draftTiles))
@@ -152,7 +149,6 @@ export default function DashboardPage() {
     })
   }
 
-  // Commits the draft: this is the actual "Save" handler for the pie modal
   const handleSavePie = () => {
     setSelectedPieTables(draftPieTables)
     localStorage.setItem(pieStorageKey, JSON.stringify(draftPieTables))

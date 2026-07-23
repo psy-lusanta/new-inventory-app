@@ -7,9 +7,9 @@ export type WidgetId =
   | 'monthly_chart_and_pie_chart'
   | 'records_chart'
   | 'top_tables'
-  | 'recent_activity'
   | 'overall_records'
   | 'dropdown_stats'
+  | 'recent_activity'
 
 export const WIDGET_LABELS: Record<WidgetId, string> = {
   asset_tags: 'Total Assets',
@@ -17,9 +17,9 @@ export const WIDGET_LABELS: Record<WidgetId, string> = {
   monthly_chart_and_pie_chart: 'Monthly Records & Table Distribution',
   records_chart: 'Overall Records',
   top_tables: 'Top Tables by Volume',
-  recent_activity: 'Recent Activity',
   overall_records: 'Records by Table (Stacked)',
   dropdown_stats: 'Dropdown Distribution',
+  recent_activity: 'Recent Activity',
 }
 
 export const DEFAULT_ORDER: WidgetId[] = [
@@ -28,9 +28,9 @@ export const DEFAULT_ORDER: WidgetId[] = [
   'monthly_chart_and_pie_chart',
   'records_chart',
   'top_tables',
-  'recent_activity',
   'overall_records',
   'dropdown_stats',
+  'recent_activity',
 ]
 
 export const useDashboardLayout = () => {

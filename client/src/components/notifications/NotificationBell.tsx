@@ -33,36 +33,45 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
 
   const fetchNotifications = async () => {
     try {
       const res = await notificationsApi.getAll()
       setNotifications(res.data.data.notifications)
       setUnreadCount(res.data.data.unreadCount)
-    } catch { }
+    } catch {}
   }
 
   useEffect(() => {
     fetchNotifications()
-    // Poll every 15 seconds
     const interval = setInterval(fetchNotifications, 15000)
     return () => clearInterval(interval)
   }, [])
 
+  // Close on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        buttonRef.current && !buttonRef.current.contains(e.target as Node) &&
-        dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false)
+    if (!isOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        const panel = document.getElementById('notification-panel')
+        if (panel && !panel.contains(e.target as Node)) {
+          setIsOpen(false)
+        }
       }
     }
-    if (isOpen) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [isOpen])
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
   }, [isOpen])
 
   const handleMarkAllRead = async () => {
@@ -79,8 +88,8 @@ export default function NotificationBell() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    await notificationsApi.delete(id)
     const notif = notifications.find((n) => n.id === id)
+    await notificationsApi.delete(id)
     setNotifications((prev) => prev.filter((n) => n.id !== id))
     if (notif && !notif.isRead) setUnreadCount((prev) => Math.max(0, prev - 1))
   }
@@ -98,7 +107,38 @@ export default function NotificationBell() {
     if (!isOpen) fetchNotifications()
   }
 
-  const buttonRect = buttonRef.current?.getBoundingClientRect()
+  // Calculate panel position
+  const getPosition = () => {
+    if (!buttonRef.current) return {}
+    const rect = buttonRef.current.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const panelWidth = Math.min(360, viewportWidth - 16) // 16px margin
+
+    // On mobile (< 480px), center the panel
+    if (viewportWidth < 480) {
+      return {
+        position: 'fixed' as const,
+        top: rect.bottom + 8,
+        left: 8,
+        right: 8,
+        width: 'auto',
+      }
+    }
+
+    // On larger screens, align to button right edge
+    let right = viewportWidth - rect.right
+    // Make sure it doesn't go off left edge
+    if (rect.right - panelWidth < 8) {
+      right = viewportWidth - panelWidth - 8
+    }
+
+    return {
+      position: 'fixed' as const,
+      top: rect.bottom + 8,
+      right,
+      width: panelWidth,
+    }
+  }
 
   return (
     <>
@@ -106,6 +146,7 @@ export default function NotificationBell() {
         ref={buttonRef}
         onClick={handleOpen}
         className="relative p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] transition-colors"
+        aria-label="Notifications"
       >
         <Bell size={18} />
         {unreadCount > 0 && (
@@ -115,41 +156,46 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {isOpen && buttonRect && createPortal(
+      {isOpen && createPortal(
         <div
-          ref={dropdownRef}
-          style={{
-            position: 'fixed',
-            top: buttonRect.bottom + 8,
-            right: window.innerWidth - buttonRect.right,
-            zIndex: 9999,
-            width: '360px',
-          }}
-          className="bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-xl border border-gray-100 dark:border-[#2a2d3e] overflow-hidden"
+          id="notification-panel"
+          style={getPosition()}
+          className="z-[9999] bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-2xl border border-gray-100 dark:border-[#2a2d3e] overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-[#2a2d3e]">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Notifications</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                Notifications
+              </h3>
               {unreadCount > 0 && (
                 <span className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-medium px-1.5 py-0.5 rounded-full">
                   {unreadCount} new
                 </span>
               )}
             </div>
-            {unreadCount > 0 && (
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium"
+                >
+                  <CheckCheck size={13} />
+                  Mark all read
+                </button>
+              )}
+              {/* Close button — useful on mobile */}
               <button
-                onClick={handleMarkAllRead}
-                className="flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium"
+                onClick={() => setIsOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] transition-colors sm:hidden"
               >
-                <CheckCheck size={13} />
-                Mark all read
+                <X size={16} />
               </button>
-            )}
+            </div>
           </div>
 
           {/* List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-[#2a2d3e]">
+          <div className="max-h-[min(320px,60vh)] overflow-y-auto divide-y divide-gray-50 dark:divide-[#2a2d3e]">
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-gray-400">
                 <Bell size={28} className="mb-2 opacity-30" />
@@ -162,20 +208,25 @@ export default function NotificationBell() {
                   <div
                     key={notif.id}
                     onClick={() => handleClick(notif)}
-                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-[#0f1117] transition-colors ${!notif.isRead ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
-                      }`}
+                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-[#0f1117] transition-colors ${
+                      !notif.isRead ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
+                    }`}
                   >
                     <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${TYPE_STYLES[notif.type]}`}>
                       <Icon size={13} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <p className={`text-xs font-medium ${!notif.isRead ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                        <p className={`text-xs font-medium leading-snug ${
+                          !notif.isRead
+                            ? 'text-gray-900 dark:text-white'
+                            : 'text-gray-600 dark:text-gray-400'
+                        }`}>
                           {notif.title}
                         </p>
                         <button
                           onClick={(e) => handleDelete(notif.id, e)}
-                          className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0 mt-0.5"
+                          className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0 mt-0.5 p-0.5"
                         >
                           <X size={12} />
                         </button>
