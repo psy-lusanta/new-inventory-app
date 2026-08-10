@@ -192,7 +192,7 @@ export default function ChangePasswordModal({ forced = false, onClose }: Props) 
                   type={showConfirm ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repeat new password"
+                  placeholder="Confirm New Password"
                   className={`w-full px-3 py-2.5 pr-10 text-sm border rounded-lg bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${confirmPassword && confirmPassword !== newPassword
                     ? 'border-red-400 dark:border-red-600'
                     : confirmPassword && confirmPassword === newPassword

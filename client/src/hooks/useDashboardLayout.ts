@@ -5,32 +5,32 @@ export type WidgetId =
   | 'asset_tags'
   | 'cost_growth'
   | 'monthly_chart_and_pie_chart'
+  | 'recent_activity'
   | 'records_chart'
   | 'top_tables'
   | 'overall_records'
   | 'dropdown_stats'
-  | 'recent_activity'
 
 export const WIDGET_LABELS: Record<WidgetId, string> = {
   asset_tags: 'Total Assets',
   cost_growth: 'Cost Growth',
   monthly_chart_and_pie_chart: 'Monthly Records & Table Distribution',
+  recent_activity: 'Recent Activity',
   records_chart: 'Overall Records',
   top_tables: 'Top Tables by Volume',
   overall_records: 'Records by Table (Stacked)',
   dropdown_stats: 'Dropdown Distribution',
-  recent_activity: 'Recent Activity',
 }
 
 export const DEFAULT_ORDER: WidgetId[] = [
   'asset_tags',
   'cost_growth',
   'monthly_chart_and_pie_chart',
+  'recent_activity',
   'records_chart',
   'top_tables',
   'overall_records',
   'dropdown_stats',
-  'recent_activity',
 ]
 
 export const useDashboardLayout = () => {

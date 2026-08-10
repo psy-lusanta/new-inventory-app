@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { tablesApi, rowsApi } from '../lib/api'
 import { FileSpreadsheet, Download, Table2, Loader2 } from 'lucide-react'
 import { useToast } from '../context/ToastContext'
+import { SkeletonReports } from '../components/ui/Skeleton'
 
 interface Field {
   id: string
@@ -158,13 +159,7 @@ export default function ReportsPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400 text-sm">Loading tables...</p>
-      </div>
-    )
-  }
+  if (isLoading) return <SkeletonReports />
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">

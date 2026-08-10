@@ -516,14 +516,14 @@ export default function TableViewPage() {
       <div className="bg-white dark:bg-[#1a1d2e] rounded-xl border border-gray-100 dark:border-[#2a2d3e] shadow-sm overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-280px)]">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10">
+            <thead className="sticky top-0 z-40">
               <tr className="border-b border-gray-100 dark:border-[#2a2d3e] bg-gray-50 dark:bg-[#0f1117]">
                 {table.fields
                   .filter((f) => visibleColumns[f.fieldName])
                   .map((field, idx) => (
                     <th
                       key={field.id}
-                      className={`text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap ${idx === 0 ? 'sticky left-0 z-20 bg-gray-50 dark:bg-[#0f1117]' : ''
+                      className={`text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap ${idx === 0 ? 'sticky left-0 z-40 bg-gray-50 dark:bg-[#0f1117]' : ''
                         }`}
                     >
                       <div className="flex items-center gap-1.5">
@@ -545,7 +545,7 @@ export default function TableViewPage() {
                   </th>
                 ))}
                 {isStaffOrAdmin && (
-                  <th className="sticky right-0 z-20 bg-gray-50 dark:bg-[#0f1117] px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="sticky right-0 z-40 bg-gray-50 dark:bg-[#0f1117] px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     <div className="flex items-center justify-between gap-2">
                       <span>Actions</span>
                       <div ref={columnPickerRef} className="relative">
@@ -577,7 +577,7 @@ export default function TableViewPage() {
                   <tr
                     key={row.id}
                     onClick={() => setSelectedRow(row)}
-                    className="hover:bg-gray-50 dark:hover:bg-[#0f1117] transition-colors group">
+                    className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-all duration-150 group cursor-pointer border-l-2 border-transparent hover:border-indigo-400 dark:hover:border-indigo-500">
                     {table.fields
                       .filter((f) => visibleColumns[f.fieldName])
                       .map((field, idx) => (

@@ -224,7 +224,7 @@ export default function Navbar() {
 
           {/* Dropdown Menu */}
           {showUserMenu && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-[#1a1d2e] rounded-xl shadow-lg border border-gray-100 dark:border-[#2a2d3e] overflow-hidden z-50">
+            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-[#1a1d2e] rounded-xl shadow-lg border border-gray-100 dark:border-[#2a2d3e] overflow-hidden z-[9999]">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-[#2a2d3e]">
                 <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                   {user?.name}

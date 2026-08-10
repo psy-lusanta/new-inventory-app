@@ -4,6 +4,7 @@ import ConfirmModal from '../components/modals/ConfirmModal'
 import { Plus, X, Shield, Eye, Briefcase, Trash2, KeyRound } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { SkeletonUsers } from '../components/ui/Skeleton'
 
 interface User {
   id: string
@@ -111,13 +112,7 @@ export default function UsersPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400 text-sm">Loading users...</p>
-      </div>
-    )
-  }
+  if (isLoading) return <SkeletonUsers />
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">

@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { useToast } from '../context/ToastContext'
 import { logsApi } from '../lib/api'
 import { Search, X, RefreshCw, Shield, User, Table2, FileText, Key, Trash2, Plus, Pencil, Download } from 'lucide-react'
+import { SkeletonLogs } from '../components/ui/Skeleton'
 
 interface LogEntry {
   id: string
@@ -148,6 +149,8 @@ export default function LogsPage() {
       showToast('Failed to export logs', 'error')
     }
   }
+
+  if (isLoading) return <SkeletonLogs />
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">

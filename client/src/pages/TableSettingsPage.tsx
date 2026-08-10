@@ -6,6 +6,7 @@ import { useModal } from '../context/ModalContext'
 import { useToast } from '../context/ToastContext'
 import ConfirmModal from '../components/modals/ConfirmModal'
 import EditFieldModal from '../components/modals/EditFieldModal'
+import { SkeletonTableSettings } from '../components/ui/Skeleton'
 import { createPortal } from 'react-dom'
 import {
   DndContext,
@@ -338,13 +339,7 @@ export default function TableSettingsPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400 text-sm">Loading...</p>
-      </div>
-    )
-  }
+  if (isLoading) return <SkeletonTableSettings />
 
   if (!table) {
     return (

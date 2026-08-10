@@ -40,9 +40,18 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
     ? String(row.data[firstField.fieldName] ?? '')
     : row.id.slice(0, 8).toUpperCase()
 
-  // ─── QR content: plain text, one field per line ───────────────────────────
+  // Fields to always exclude from QR
+  const QR_EXCLUDED_FIELDS = ['cost', 'Cost', 'COST']
+
+  // Build QR content — skip empty fields AND excluded fields
   const qrContent = sortedFields
-    .map((f) => `${f.fieldName}: ${row.data[f.fieldName] ?? ''}`)
+    .filter((f) => !QR_EXCLUDED_FIELDS.map(e => e.toLowerCase()).includes(f.fieldName.toLowerCase()))
+    .map((f) => {
+      const value = row.data[f.fieldName]
+      if (value === undefined || value === null || value === '') return null
+      return `${f.fieldName}: ${value}`
+    })
+    .filter(Boolean)
     .join('\n')
 
   useEffect(() => {
@@ -56,6 +65,16 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
   const handlePrint = () => {
     const printWindow = window.open('', '_blank', 'width=500,height=700')
     if (!printWindow) return
+    const cleanQrContent = sortedFields
+      .filter((f) => !['cost'].includes(f.fieldName.toLowerCase()))
+      .map((f) => {
+        const value = row.data[f.fieldName]
+        if (value === undefined || value === null || value === '') return null
+        return `${f.fieldName}: ${value}`
+      })
+      .filter(Boolean)
+      .join('\n')
+
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -152,8 +171,8 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
     if (field.fieldType === 'boolean') {
       return (
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${value === true || value === 'true'
-            ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
           }`}>
           {value === true || value === 'true' ? 'Yes' : 'No'}
         </span>

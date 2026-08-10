@@ -314,13 +314,38 @@ export default function AccountabilityFormPage() {
         <head>
           <title>PAF - ${form.pafNo}</title>
           <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; font-size: 10px; background: white; }
-            @page { size: 8.5in 11in; margin: 10mm; }
-            input { border: none !important; outline: none; background: transparent; width: 100%; font-size: 9px; color: #000; pointer-events: none; }
-            button { display: none !important; }
-            select { display: none !important; }
-            .no-print { display: none !important; }
+            * { 
+              margin: 0; 
+              padding: 5px; 
+              box-sizing: border-box; 
+            }
+            body { 
+              font-family: Arial, sans-serif; 
+              font-size: 10px; 
+              background: white; 
+            }
+            @page { 
+              size: 8.5in 11in; 
+              margin: 10mm; 
+            }
+            input { 
+              border: none !important; 
+              outline: none; 
+              background: transparent; 
+              width: 100%; 
+              font-size: 9px; 
+              color: #000; 
+              pointer-events: none; 
+            }
+            button { 
+              display: none !important; 
+            }
+            select { 
+              display: none !important; 
+            }
+            .no-print { 
+              display: none !important; 
+            }
           </style>
         </head>
         <body>${content.innerHTML}</body>
@@ -430,37 +455,39 @@ export default function AccountabilityFormPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '6px' }}>
             <tbody>
               <tr>
-                <td style={{ width: '40%', padding: '4px', verticalAlign: 'middle' }}>
-                  <div
-                    onClick={() => !isViewer && setShowLogoPicker(true)}
-                    style={{
-                      width: '130px', height: '50px', border: '1px dashed #ccc',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      cursor: isViewer ? 'default' : 'pointer', overflow: 'hidden', borderRadius: '4px',
-                    }}
-                  >
-                    {selectedLogo ? (
-                      <img src={selectedLogo.dataUrl} alt="Logo" style={{ maxWidth: '130px', maxHeight: '50px', objectFit: 'contain' }} />
-                    ) : (
-                      <span style={{ fontSize: '8px', color: '#999', textAlign: 'center', padding: '4px' }}>
-                        {isViewer ? 'No logo' : 'Click to set logo'}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td style={{ textAlign: 'right', padding: '4px', verticalAlign: 'middle' }}>
-                  <div style={{ fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px' }}>PROPERTY</div>
-                  <div style={{ fontSize: '15px', fontWeight: 'bold', letterSpacing: '1px' }}>ACCOUNTABILITY FORM</div>
-                </td>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <td style={{ width: '40%', padding: '4px', verticalAlign: 'middle' }}>
+                    <div
+                      onClick={() => !isViewer && setShowLogoPicker(true)}
+                      style={{
+                        width: '170px', height: '50px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: isViewer ? 'default' : 'pointer', overflow: 'hidden',
+                      }}
+                    >
+                      {selectedLogo ? (
+                        <img src={selectedLogo.dataUrl} alt="Logo" style={{ maxWidth: '170px', maxHeight: '50px', objectFit: 'contain' }} />
+                      ) : (
+                        <span style={{ fontSize: '8px', color: '#999', textAlign: 'center', padding: '4px' }}>
+                          {isViewer ? 'No logo' : 'Click to set logo'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'center', padding: '2px', verticalAlign: 'middle' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '-5px' }}>PROPERTY</div>
+                    <div style={{ fontSize: '15px', fontWeight: 'bold' }}>ACCOUNTABILITY FORM</div>
+                  </td>
+                </div>
               </tr>
               <tr>
                 <td colSpan={2} style={{ textAlign: 'right', padding: '2px 4px', fontSize: '10px' }}>
-                  <span style={{ fontWeight: 'bold' }}>PAF No.: </span>
+                  <span style={{ fontWeight: 'bold', fontSize: '13px' }}>PAF No.: </span>
                   <input
                     value={form.pafNo}
                     onChange={(e) => !isViewer && update('pafNo', e.target.value)}
                     readOnly={isViewer}
-                    style={{ border: 'none', borderBottom: '1px solid #e53e3e', color: '#e53e3e', fontWeight: 'bold', outline: 'none', width: '110px', fontSize: '10px', textAlign: 'center', background: 'transparent', cursor: isViewer ? 'default' : 'text' }}
+                    style={{ border: 'none', color: '#e53e3e', fontWeight: 'bold', outline: 'none', width: '110px', fontSize: '12px', textAlign: 'center', background: 'transparent', cursor: isViewer ? 'default' : 'text' }}
                   />
                 </td>
               </tr>
@@ -562,7 +589,7 @@ export default function AccountabilityFormPage() {
           <SectionHeader title="ACKNOWLEDGEMENT" />
           <div style={{ border: '1px solid #000', padding: '6px', fontSize: '9px', lineHeight: '1.5' }}>
             I hereby acknowledge that the above listed company property has been issued to me as a{' '}
-            <span style={{ textDecoration: 'underline' }}>newly purchased unit</span>/used but in good condition.
+            <span style={{ textDecoration: 'underline' }}>newly purchased unit/used</span> but in good condition.
           </div>
           <div style={{ padding: '18px 0 4px 0', width: '45%' }}>
             <div style={{ borderTop: '1px solid #000', paddingTop: '2px', fontSize: '8px', textAlign: 'center' }}>
