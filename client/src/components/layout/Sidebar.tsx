@@ -10,6 +10,7 @@ import {
   ChevronRight,
   FilePen,
   ScrollText,
+  DollarSign,
 } from 'lucide-react'
 import { tablesApi } from '../../lib/api'
 import { useModal } from '../../context/ModalContext'
@@ -25,6 +26,7 @@ interface InventoryTable {
 const staticNavItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/reports', label: 'Reports', icon: FileBarChart },
+  { to: '/cost', label: 'Cost', icon: DollarSign },  
   { to: '/accountability', label: 'Accountability Form', icon: FilePen },
   { to: '/logs', label: 'Logs', icon: ScrollText, adminOnly: true },
   { to: '/users', label: 'Users', icon: Users, adminOnly: true },

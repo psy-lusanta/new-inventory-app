@@ -102,7 +102,7 @@ export const reportsApi = {
   getMonthlyMovements: () => api.get('/reports/monthly-movements'),
   getDropdownStats: () => api.get('/reports/dropdown-stats'),
   getAssetTagStats: () => api.get('/reports/asset-tag-stats'),
-  getCostStats: () => api.get('/reports/cost-stats'),
+  getCostStats: (year?: number) => api.get(`/reports/cost-stats${year ? `?year=${year}` : ''}`),
   reorderFields: (tableId: string, fieldIds: string[]) => api.put(`/tables/${tableId}/fields/reorder`, { fieldIds }),
 }
 

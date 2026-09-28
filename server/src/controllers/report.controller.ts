@@ -50,7 +50,7 @@ export const getLowStockAlerts = async (req: AuthenticatedRequest, res: Response
 export const getDashboard = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const cacheKey = 'dashboard'
-    const cached = cache.get(cacheKey)
+    const cached = await cache.get(cacheKey)
     if (cached) {
       res.json({ success: true, data: cached, cached: true })
       return
@@ -118,7 +118,7 @@ export const getDashboard = async (req: AuthenticatedRequest, res: Response) => 
     )
 
     const result = { totalTables, totalRows, totalMovements, lowStockCount, tablesSummary, recentActivity }
-    cache.set(cacheKey, result, 30) // cache 30 seconds
+    await cache.set(cacheKey, result, 30) // cache 30 seconds
 
     res.json({ success: true, data: result })
   } catch (error) {
@@ -130,7 +130,7 @@ export const getDashboard = async (req: AuthenticatedRequest, res: Response) => 
 export const getMonthlyMovements = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const cacheKey = `monthly-${new Date().getFullYear()}`
-    const cached = cache.get(cacheKey)
+    const cached = await cache.get(cacheKey)
     if (cached) {
       res.json({ success: true, data: cached, cached: true })
       return
@@ -153,7 +153,7 @@ export const getMonthlyMovements = async (req: AuthenticatedRequest, res: Respon
       count: rows.filter((r) => new Date(r.createdAt).getMonth() === index).length,
     }))
 
-    cache.set(cacheKey, monthlyData, 300) // cache 5 minutes
+    await cache.set(cacheKey, monthlyData, 300) // cache 5 minutes
     res.json({ success: true, data: monthlyData })
   } catch (error) {
     console.error('GetMonthlyMovements error:', error)
@@ -215,7 +215,7 @@ export const getRowMovements = async (req: AuthenticatedRequest, res: Response) 
 export const getDropdownStats = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const cacheKey = 'dropdown-stats'
-    const cached = cache.get(cacheKey)
+    const cached = await cache.get(cacheKey)
     if (cached) { res.json({ success: true, data: cached }); return }
 
     const tables = await prisma.inventoryTable.findMany({
@@ -256,7 +256,7 @@ export const getDropdownStats = async (req: AuthenticatedRequest, res: Response)
       }
     }
 
-    cache.set(cacheKey, result, 60)
+    await cache.set(cacheKey, result, 30)
     res.json({ success: true, data: result })
   } catch (error) {
     console.error('GetDropdownStats error:', error)
@@ -268,7 +268,7 @@ export const getDropdownStats = async (req: AuthenticatedRequest, res: Response)
 export const getAssetTagStats = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const cacheKey = 'asset-tag-stats'
-    const cached = cache.get(cacheKey)
+    const cached = await cache.get(cacheKey)
     if (cached) { res.json({ success: true, data: cached }); return }
 
     const tables = await prisma.inventoryTable.findMany({
@@ -303,7 +303,7 @@ export const getAssetTagStats = async (req: AuthenticatedRequest, res: Response)
       })
       .filter(Boolean)
 
-    cache.set(cacheKey, result, 60)
+    await cache.set(cacheKey, result, 60)
     res.json({ success: true, data: result })
   } catch (error) {
     console.error('GetAssetTagStats error:', error)
@@ -314,22 +314,42 @@ export const getAssetTagStats = async (req: AuthenticatedRequest, res: Response)
 // ─── Cost stats per table ─────────────────────────────────────────────────────
 export const getCostStats = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const cacheKey = 'cost-stats'
-    const cached = cache.get(cacheKey)
+    const requestedYear = req.query.year
+      ? parseInt(String(req.query.year))
+      : new Date().getFullYear()
+
+    const cacheKey = `cost-stats-${requestedYear}`
+    const cached = await cache.get(cacheKey)
     if (cached) { res.json({ success: true, data: cached }); return }
 
-    const now = new Date()
-    const year = now.getFullYear()
-    const monthStart = new Date(year, now.getMonth(), 1)
-    const yearStart = new Date(year, 0, 1)
+    const yearStart = new Date(requestedYear, 0, 1)
+    const yearEnd = new Date(requestedYear, 11, 31, 23, 59, 59)
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 
-    // Get all rows across all tables that have a Cost field
     const tables = await prisma.inventoryTable.findMany({
       include: {
         fields: { where: { fieldName: { equals: 'Cost', mode: 'insensitive' } } },
-        rows: { select: { data: true, createdAt: true } },
+        rows: {
+          select: { data: true, createdAt: true },
+          where: { createdAt: { gte: yearStart, lte: yearEnd } },
+        },
       },
     })
+
+    // Get all available years from DB for the year picker
+    const allRows = await prisma.inventoryRow.findMany({
+      select: { createdAt: true },
+      orderBy: { createdAt: 'asc' },
+      take: 1,
+    })
+    const oldestYear = allRows.length > 0
+      ? new Date(allRows[0].createdAt).getFullYear()
+      : new Date().getFullYear()
+    const currentYear = new Date().getFullYear()
+    const availableYears = Array.from(
+      { length: currentYear - oldestYear + 1 },
+      (_, i) => currentYear - i
+    )
 
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -340,8 +360,7 @@ export const getCostStats = async (req: AuthenticatedRequest, res: Response) => 
     const monthlyTrend = months.map((month) => ({ month, total: 0 }))
 
     for (const table of tables) {
-      if (table.fields.length === 0) continue // no Cost field
-
+      if (table.fields.length === 0) continue
       const costFieldName = table.fields[0].fieldName
       let tableCost = 0
       let tableMonthCost = 0
@@ -349,21 +368,19 @@ export const getCostStats = async (req: AuthenticatedRequest, res: Response) => 
       for (const row of table.rows) {
         const data = row.data as Record<string, any>
         const cost = Number(data[costFieldName] ?? 0)
-        if (isNaN(cost)) continue
+        if (isNaN(cost) || cost === 0) continue
 
         tableCost += cost
+        yearlySpend += cost
         totalSpend += cost
 
         const rowDate = new Date(row.createdAt)
         const monthIndex = rowDate.getMonth()
+        monthlyTrend[monthIndex].total += cost
 
-        if (rowDate >= monthStart) monthlySpend += cost
-        if (rowDate >= yearStart) {
-          yearlySpend += cost
-          if (rowDate.getFullYear() === year) {
-            monthlyTrend[monthIndex].total += cost
-            tableMonthCost += cost
-          }
+        if (rowDate >= monthStart) {
+          monthlySpend += cost
+          tableMonthCost += cost
         }
       }
 
@@ -380,11 +397,20 @@ export const getCostStats = async (req: AuthenticatedRequest, res: Response) => 
 
     byTable.sort((a, b) => b.totalCost - a.totalCost)
 
-    const result = { totalSpend, monthlySpend, yearlySpend, byTable, monthlyTrend }
-    cache.set(cacheKey, result, 60)
+    const result = {
+      year: requestedYear,
+      availableYears,
+      totalSpend,
+      monthlySpend: requestedYear === currentYear ? monthlySpend : 0,
+      yearlySpend,
+      byTable,
+      monthlyTrend,
+    }
+
+    await cache.set(cacheKey, result, 60)
     res.json({ success: true, data: result })
   } catch (error) {
-    console.error('getCostStats error:', error)
+    console.error('GetCostStats error:', error)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 }

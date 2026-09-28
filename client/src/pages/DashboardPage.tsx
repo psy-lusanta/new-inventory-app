@@ -24,6 +24,8 @@ import {
   EyeOff,
   Check,
   TrendingUp,
+  Star,
+  TrendingDown,
 } from "lucide-react";
 import {
   DndContext,
@@ -57,39 +59,131 @@ function AnimatedNumber({ value }: { value: number }) {
   return <span className="tabular-nums">{count}</span>;
 }
 
-function AnimatedTile({
+type Growth = { direction: "up" | "down" | "flat"; value: number };
+
+function TileTrendPill({ direction, value }: Growth) {
+  const isUp = direction === "up";
+  const isFlat = direction === "flat";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${
+        isFlat
+          ? "bg-gray-100 dark:bg-gray-800 text-gray-400"
+          : isUp
+            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+            : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+      }`}
+    >
+      {isFlat ? (
+        "—"
+      ) : isUp ? (
+        <TrendingUp className="w-3 h-3" />
+      ) : (
+        <TrendingDown className="w-3 h-3" />
+      )}{" "}
+      {value}%
+    </span>
+  );
+}
+
+function FeaturedTile({
   table,
-  index,
+  growth,
+  addedThisMonth,
+  trend,
 }: {
   table: TableSummary;
-  index: number;
+  growth: Growth;
+  addedThisMonth: number;
+  trend: { month: string; count: number }[];
 }) {
   const count = useCountUp(table.rowCount);
   return (
-    <div
-      key={table.id}
-      className="bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 sm:p-5 border border-gray-100 dark:border-[#2a2d3e] hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
-    >
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium truncate">
+    <div className="h-full bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-[#2a2d3e] hover:shadow-md transition-shadow duration-200 flex flex-col">
+      <div>
+        <p className="text-4xl sm:text-2xl text-gray-500 dark:text-gray-400 font-medium truncate mb-2">
           {table.name}
         </p>
-        <div
-          className="p-2 rounded-lg shrink-0"
-          style={{
-            backgroundColor: `${PIE_COLORS[index % PIE_COLORS.length]}20`,
-          }}
-        >
-          <Table2
-            size={16}
-            style={{ color: PIE_COLORS[index % PIE_COLORS.length] }}
-          />
+        <p className="text-5xl sm:text-6xl font-bold text-gray-900 dark:text-white tabular-nums">
+          {count}
+        </p>
+        <div className="mt-2.5 flex items-center gap-1.5">
+          <TileTrendPill direction={growth.direction} value={growth.value} />
+          <span className="text-xs text-gray-400">
+            {addedThisMonth} added this month
+          </span>
         </div>
       </div>
-      <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white tabular-nums">
-        {count}
-      </p>
-      <p className="text-xs text-gray-400 mt-1">records</p>
+
+      <div className="flex-1 mt-4 min-h-[110px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={trend}
+            margin={{ top: 5, right: 0, left: 0, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient
+                id={`grad-${table.id}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="month"
+              tick={{ fontSize: 10, fill: "#8892a4" }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis hide allowDecimals={false} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#1a1d2e",
+                border: "1px solid #2a2d3e",
+                borderRadius: "8px",
+                color: "#e2e8f0",
+                fontSize: "12px",
+              }}
+              formatter={(v: number) => [`${v} records`, "Added"]}
+            />
+            <Area
+              type="monotone"
+              dataKey="count"
+              stroke="#6366f1"
+              strokeWidth={2}
+              fill={`url(#grad-${table.id})`}
+              dot={{ fill: "#6366f1", r: 3 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function CompactTile({
+  table,
+  growth,
+}: {
+  table: TableSummary;
+  growth: Growth;
+}) {
+  const count = useCountUp(table.rowCount);
+  return (
+    <div className="bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 border border-gray-100 dark:border-[#2a2d3e] flex items-center justify-between hover:shadow-md transition-shadow duration-200">
+      <div className="min-w-0">
+        <p className="text-xl text-gray-500 dark:text-gray-400 font-medium mb-1 truncate">
+          {table.name}
+        </p>
+        <p className="text-4xl font-bold text-gray-900 dark:text-white tabular-nums">
+          {count}
+        </p>
+      </div>
+      <TileTrendPill direction={growth.direction} value={growth.value} />
     </div>
   );
 }
@@ -231,32 +325,103 @@ export default function DashboardPage() {
 
   const pieStorageKey = `dashboard-pie-${user?.id}`;
   const tileStorageKey = `dashboard-tiles-${user?.id}`;
+  const featuredStorageKey = `dashboard-featured-tile-${user?.id}`;
 
   // ────── Tile Picker  ─────────────────────────────────────────────────────────────────────
   const [selectedTiles, setSelectedTiles] = useState<string[]>([]);
+  const [featuredTileId, setFeaturedTileId] = useState<string | null>(null);
   const [showTilePicker, setShowTilePicker] = useState(false);
   const [draftTiles, setDraftTiles] = useState<string[]>([]);
+  const [draftFeaturedId, setDraftFeaturedId] = useState<string | null>(null);
   const tilesTableData = (data?.tablesSummary ?? []).filter((t) =>
     selectedTiles.includes(t.id),
   );
 
   const openTilePicker = () => {
-    setDraftTiles(selectedTiles); // seed draft from the last saved selection
+    setDraftTiles(selectedTiles);
+    setDraftFeaturedId(featuredTileId);
     setShowTilePicker(true);
   };
 
   const toggleDraftTile = (tableId: string) => {
     setDraftTiles((prev) => {
-      if (prev.includes(tableId)) return prev.filter((id) => id !== tableId);
-      if (prev.length >= 4) return prev; // max 4
+      if (prev.includes(tableId)) {
+        if (draftFeaturedId === tableId) setDraftFeaturedId(null);
+        return prev.filter((id) => id !== tableId);
+      }
+      if (prev.length >= 7) return prev; // max 7
       return [...prev, tableId];
     });
   };
 
   const handleSaveTiles = () => {
+    const nextFeatured = draftFeaturedId ?? draftTiles[0] ?? null;
     setSelectedTiles(draftTiles);
+    setFeaturedTileId(nextFeatured);
     localStorage.setItem(tileStorageKey, JSON.stringify(draftTiles));
+    if (nextFeatured) localStorage.setItem(featuredStorageKey, nextFeatured);
     setShowTilePicker(false);
+  };
+
+  const getTableGrowth = (tableName: string): Growth => {
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    const thisMonthAdds = (data?.recentActivity ?? []).filter(
+      (a) =>
+        a.tableName === tableName &&
+        a.action === "created" &&
+        new Date(a.timestamp) >= thisMonthStart,
+    ).length;
+
+    const lastMonthAdds = (data?.recentActivity ?? []).filter(
+      (a) =>
+        a.tableName === tableName &&
+        a.action === "created" &&
+        new Date(a.timestamp) >= lastMonthStart &&
+        new Date(a.timestamp) < thisMonthStart,
+    ).length;
+
+    if (lastMonthAdds === 0 && thisMonthAdds === 0)
+      return { direction: "flat", value: 0 };
+    if (lastMonthAdds === 0) return { direction: "up", value: 100 };
+    const pct = Math.round(
+      ((thisMonthAdds - lastMonthAdds) / lastMonthAdds) * 100,
+    );
+    return { direction: pct >= 0 ? "up" : "down", value: Math.abs(pct) };
+  };
+
+  const getThisMonthAdds = (tableName: string) => {
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return (data?.recentActivity ?? []).filter(
+      (a) =>
+        a.tableName === tableName &&
+        a.action === "created" &&
+        new Date(a.timestamp) >= thisMonthStart,
+    ).length;
+  };
+
+  const getTableMonthlyTrend = (tableName: string, months = 6) => {
+    const now = new Date();
+    const result: { month: string; count: number }[] = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      const count = (data?.recentActivity ?? []).filter(
+        (a) =>
+          a.tableName === tableName &&
+          a.action === "created" &&
+          new Date(a.timestamp) >= start &&
+          new Date(a.timestamp) < end,
+      ).length;
+      result.push({
+        month: start.toLocaleDateString("en-US", { month: "short" }),
+        count,
+      });
+    }
+    return result;
   };
 
   // ────── Pie Chart  ─────────────────────────────────────────────────────────────────────
@@ -327,6 +492,7 @@ export default function DashboardPage() {
         } catch {}
 
         // ─── Load tile preferences ──────────────────────────────────────────
+        let validTiles: string[] = [];
         const savedTiles = localStorage.getItem(tileStorageKey);
         if (savedTiles) {
           try {
@@ -334,20 +500,28 @@ export default function DashboardPage() {
             const valid = parsed.filter((id: string) =>
               dashboard.tablesSummary.some((t: any) => t.id === id),
             );
-            setSelectedTiles(
+            validTiles =
               valid.length > 0
                 ? valid
-                : dashboard.tablesSummary.slice(0, 4).map((t: any) => t.id),
-            );
+                : dashboard.tablesSummary.slice(0, 7).map((t: any) => t.id);
           } catch {
-            setSelectedTiles(
-              dashboard.tablesSummary.slice(0, 4).map((t: any) => t.id),
-            );
+            validTiles = dashboard.tablesSummary
+              .slice(0, 7)
+              .map((t: any) => t.id);
           }
         } else {
-          setSelectedTiles(
-            dashboard.tablesSummary.slice(0, 4).map((t: any) => t.id),
-          );
+          validTiles = dashboard.tablesSummary
+            .slice(0, 7)
+            .map((t: any) => t.id);
+        }
+        setSelectedTiles(validTiles);
+
+        // ─── Load featured-tile preference ──────────────────────────────────
+        const savedFeatured = localStorage.getItem(featuredStorageKey);
+        if (savedFeatured && validTiles.includes(savedFeatured)) {
+          setFeaturedTileId(savedFeatured);
+        } else {
+          setFeaturedTileId(validTiles[0] ?? null);
         }
 
         // ─── Load pie preferences ───────────────────────────────────────────
@@ -408,7 +582,14 @@ export default function DashboardPage() {
   // ─── Widget renderers ─────────────────────────────────────────────────────
   const renderWidget = (id: WidgetId) => {
     switch (id) {
-      case "asset_tags":
+      case "asset_tags": {
+        const featuredTile =
+          tilesTableData.find((t) => t.id === featuredTileId) ??
+          tilesTableData[0];
+        const compactTiles = tilesTableData.filter(
+          (t) => t.id !== featuredTile?.id,
+        );
+
         return (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -427,18 +608,43 @@ export default function DashboardPage() {
             {tilesTableData.length === 0 ? (
               <div className="bg-white dark:bg-[#1a1d2e] rounded-xl border border-gray-100 dark:border-[#2a2d3e] p-6 text-center">
                 <p className="text-sm text-gray-400">
-                  No tables selected. Click Customize to pick up to 4.
+                  No tables selected. Click Customize to pick up to 7.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {tilesTableData.map((table, index) => (
-                  <AnimatedTile key={table.id} table={table} index={index} />
-                ))}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+                {featuredTile && (
+                  <div className="hidden lg:block">
+                    <FeaturedTile
+                      table={featuredTile}
+                      growth={getTableGrowth(featuredTile.name)}
+                      addedThisMonth={getThisMonthAdds(featuredTile.name)}
+                      trend={getTableMonthlyTrend(featuredTile.name)}
+                    />
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {featuredTile && (
+                    <div className="lg:hidden">
+                      <CompactTile
+                        table={featuredTile}
+                        growth={getTableGrowth(featuredTile.name)}
+                      />
+                    </div>
+                  )}
+                  {compactTiles.map((table) => (
+                    <CompactTile
+                      key={table.id}
+                      table={table}
+                      growth={getTableGrowth(table.name)}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
         );
+      }
 
       case "cost_growth":
         if (!costStats || costStats.totalSpend === 0) return null;
@@ -472,10 +678,9 @@ export default function DashboardPage() {
                   />
                   <YAxis
                     tick={{ fontSize: 11, fill: "#8892a4" }}
-                    width={55}
-                    tickFormatter={(v) =>
-                      `₱${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`
-                    }
+                    width={75}
+                    domain={[250000, "dataMax"]}
+                    tickFormatter={(v) => `₱${v.toLocaleString()}`}
                   />
                   <Tooltip
                     contentStyle={{
@@ -1298,7 +1503,8 @@ export default function DashboardPage() {
                   Customize Tiles
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Pick up to 4 tables ({draftTiles.length}/4)
+                  Pick up to 7 tables ({draftTiles.length}/7) · tap the star to
+                  feature one
                 </p>
               </div>
               {/* X = cancel: closes without touching selectedTiles/localStorage */}
@@ -1312,29 +1518,60 @@ export default function DashboardPage() {
             <div className="p-2 max-h-80 overflow-y-auto">
               {data?.tablesSummary.map((table) => {
                 const isSelected = draftTiles.includes(table.id);
-                const isDisabled = !isSelected && draftTiles.length >= 4;
+                const isDisabled = !isSelected && draftTiles.length >= 7;
+                const isFeatured = draftFeaturedId === table.id;
                 return (
-                  <button
+                  <div
                     key={table.id}
-                    onClick={() => toggleDraftTile(table.id)}
-                    disabled={isDisabled}
                     className={`flex items-center justify-between w-full px-3 py-2.5 text-sm rounded-lg transition-colors ${
                       isDisabled
-                        ? "text-gray-300 dark:text-gray-600 cursor-not-allowed"
+                        ? "text-gray-300 dark:text-gray-600"
                         : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2a2d3e]"
                     }`}
                   >
-                    <span>{table.name}</span>
-                    <div
-                      className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                        isSelected
-                          ? "bg-indigo-600 border-indigo-600"
-                          : "border-gray-300 dark:border-gray-600"
-                      }`}
+                    <button
+                      onClick={() => toggleDraftTile(table.id)}
+                      disabled={isDisabled}
+                      className="flex items-center gap-2 flex-1 min-w-0 text-left disabled:cursor-not-allowed"
                     >
-                      {isSelected && <Check size={11} className="text-white" />}
-                    </div>
-                  </button>
+                      <div
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          isSelected
+                            ? "bg-indigo-600 border-indigo-600"
+                            : "border-gray-300 dark:border-gray-600"
+                        }`}
+                      >
+                        {isSelected && (
+                          <Check size={11} className="text-white" />
+                        )}
+                      </div>
+                      <span className="truncate">{table.name}</span>
+                    </button>
+                    {isSelected && (
+                      <button
+                        onClick={() =>
+                          setDraftFeaturedId((prev) =>
+                            prev === table.id ? prev : table.id,
+                          )
+                        }
+                        title={
+                          isFeatured
+                            ? "Featured tile"
+                            : "Make this the featured tile"
+                        }
+                        className={`p-1 rounded-md shrink-0 ml-2 ${
+                          isFeatured
+                            ? "text-amber-500"
+                            : "text-gray-300 dark:text-gray-600 hover:text-amber-400"
+                        }`}
+                      >
+                        <Star
+                          size={14}
+                          fill={isFeatured ? "currentColor" : "none"}
+                        />
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>

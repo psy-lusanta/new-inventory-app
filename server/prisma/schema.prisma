@@ -40,6 +40,8 @@ model User {
   password           String
   role               Role     @default(viewer)
   mustChangePassword Boolean  @default(false)
+  resetCode          String?
+  resetCodeExpiry    DateTime?
   createdAt          DateTime @default(now())
 
   // Relations

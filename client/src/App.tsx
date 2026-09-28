@@ -12,6 +12,7 @@ import NotFoundPage from './pages/NotFoundPage'
 import LogsPage from './pages/LogsPage'
 import AccessDenied from './pages/AccessDenied'
 import Settings from './pages/SettingsPage'
+import CostPage from './pages/CostPage'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth()
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="tables/:id" element={<TableViewPage />} />
         <Route path="tables/:id/settings" element={<TableSettingsPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="cost" element={<CostPage />} />
         <Route path="settings" element={<Settings />} />
         <Route path="accountability" element={<AccountabilityFormPage />} />
         <Route path="logs" element={<LogsPage />} />

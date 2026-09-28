@@ -5,8 +5,8 @@ import { cache } from '../lib/cache'
 
 export const getLogs = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string ?? '1', 10)
-    const limit = parseInt(req.query.limit as string ?? '50', 10)
+    const page = parseInt((req.query.page as string) ?? '1', 10)
+    const limit = parseInt((req.query.limit as string) ?? '50', 10)
     const skip = (page - 1) * limit
     const action = req.query.action as string | undefined
     const userId = req.query.userId as string | undefined
@@ -57,8 +57,13 @@ export const getLogs = async (req: AuthenticatedRequest, res: Response) => {
 export const getLogStats = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const cacheKey = 'log-stats'
-    const cached = cache.get(cacheKey)
-    if (cached) { res.json({ success: true, data: cached }); return }
+
+    // ✅ Now async
+    const cached = await cache.get(cacheKey)
+    if (cached) {
+      res.json({ success: true, data: cached })
+      return
+    }
 
     const [total, byAction, byUser, last24h] = await Promise.all([
       prisma.activityLog.count(),
@@ -74,7 +79,9 @@ export const getLogStats = async (req: AuthenticatedRequest, res: Response) => {
         take: 5,
       }),
       prisma.activityLog.count({
-        where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+        where: {
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
       }),
     ])
 
@@ -92,7 +99,9 @@ export const getLogStats = async (req: AuthenticatedRequest, res: Response) => {
     }))
 
     const result = { total, byAction, topUsers, last24h }
-    cache.set(cacheKey, result, 60)
+
+    // ✅ Now async
+    await cache.set(cacheKey, result, 60)
     res.json({ success: true, data: result })
   } catch (error) {
     console.error('GetLogStats error:', error)

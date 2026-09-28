@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import prisma from '../lib/prisma'
 import { logActivity, LOG_ACTIONS } from '../lib/logger.activity'
 import { AuthenticatedRequest } from 'src/middleware/auth.middleware'
+import { validatePasswordStrength } from '../lib/validate'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret'
 
@@ -167,6 +168,12 @@ export const createUser = async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'Password must be at least 6 characters' })
       return
     }
+    
+    const pwError = validatePasswordStrength(password)
+    if (pwError) {
+      res.status(400).json({ success: false, error: pwError })
+      return
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10)
 
@@ -200,6 +207,12 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     if (!password || password.length < 6) {
       res.status(400).json({ success: false, error: 'Password must be at least 6 characters' })
+      return
+    }
+
+    const pwError = validatePasswordStrength(password)
+    if (pwError) {
+      res.status(400).json({ success: false, error: pwError })
       return
     }
 
@@ -246,6 +259,12 @@ export const changeOwnPassword = async (req: Request, res: Response) => {
     const isValid = await bcrypt.compare(currentPassword, user.password)
     if (!isValid) {
       res.status(401).json({ success: false, error: 'Current password is incorrect' })
+      return
+    }
+    
+    const pwError = validatePasswordStrength(newPassword)
+    if (pwError) {
+      res.status(400).json({ success: false, error: pwError })
       return
     }
 

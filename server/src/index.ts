@@ -11,6 +11,8 @@ import reportRoutes from './routes/report.routes'
 import pafRoutes from './routes/paf.routes'
 import logRoutes from './routes/log.routes'
 import notificationRoutes from './routes/notification.routes'
+import prisma from './lib/prisma'
+import { cache } from './lib/cache'
 
 dotenv.config()
 
@@ -86,13 +88,24 @@ app.use('/api/logs', logRoutes)
 app.use('/api/notifications', notificationRoutes)
 
 // ─── Health check ─────────────────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
-  res.json({
-    success: true,
-    message: 'Server is running',
-    env: process.env.NODE_ENV || 'development',
-    timestamp: new Date().toISOString(),
-  })
+app.get('/api/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    res.json({
+      success: true,
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: Math.round(process.uptime()),
+      database: 'connected',
+      cache: cache.isRedisConnected() ? 'redis' : 'memory',
+    })
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      status: 'unhealthy',
+      error: 'Database connection failed',
+    })
+  }
 })
 
 // ─── Global error handler ─────────────────────────────────────────────────────

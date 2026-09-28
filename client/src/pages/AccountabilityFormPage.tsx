@@ -314,18 +314,19 @@ export default function AccountabilityFormPage() {
         <head>
           <title>PAF - ${form.pafNo}</title>
           <style>
-            * { 
+            html, body { 
               margin: 0; 
-              padding: 5px; 
+              padding: 10px; 
               box-sizing: border-box; 
             }
             body { 
-              font-family: Arial, sans-serif; 
+              font-family: Arial, Helvetica, sans-serif; 
               font-size: 10px; 
-              background: white; 
+              color: #000; 
+              line-height: 1.3; 
             }
             @page { 
-              size: 8.5in 11in; 
+              size: Letter; 
               margin: 10mm; 
             }
             input { 
@@ -452,47 +453,138 @@ export default function AccountabilityFormPage() {
           }}
         >
           {/* Header */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '6px' }}>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginBottom: '6px',
+            }}
+          >
             <tbody>
               <tr>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <td style={{ width: '40%', padding: '4px', verticalAlign: 'middle' }}>
-                    <div
-                      onClick={() => !isViewer && setShowLogoPicker(true)}
+                {/* COMPANY LOGO */}
+                <td
+                  style={{
+                    width: '42%',
+                    padding: '4px 6px',
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  <div
+                    onClick={() => !isViewer && setShowLogoPicker(true)}
+                    style={{
+                      width: '180px',
+                      height: '70px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      cursor: isViewer ? 'default' : 'pointer',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {selectedLogo ? (
+                      <img
+                        src={selectedLogo.dataUrl}
+                        alt="Company Logo"
+                        style={{
+                          width: '180px',
+                          height: '70px',
+                          objectFit: 'contain',
+                          objectPosition: 'left center',
+                          display: 'block',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: '8px',
+                          color: '#999',
+                          textAlign: 'center',
+                          padding: '4px',
+                        }}
+                      >
+                        {isViewer ? 'No logo' : 'Click to set logo'}
+                      </span>
+                    )}
+                  </div>
+                </td>
+
+                {/* TITLE + PAF NUMBER */}
+                <td
+                  style={{
+                    width: '58%',
+                    padding: '4px 6px',
+                    verticalAlign: 'middle',
+                    textAlign: 'right',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 'bold',
+                      lineHeight: '1.15',
+                      textAlign: 'right',
+                    }}
+                  >
+                    PROPERTY
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 'bold',
+                      lineHeight: '1.15',
+                      textAlign: 'right',
+                    }}
+                  >
+                    ACCOUNTABILITY FORM
+                  </div>
+
+                  {/* PAF NUMBER */}
+                  <div
+                    style={{
+                      marginTop: '5px',
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <span
                       style={{
-                        width: '170px', height: '50px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: isViewer ? 'default' : 'pointer', overflow: 'hidden',
+                        fontWeight: 'bold',
+                        fontSize: '10px',
                       }}
                     >
-                      {selectedLogo ? (
-                        <img src={selectedLogo.dataUrl} alt="Logo" style={{ maxWidth: '170px', maxHeight: '50px', objectFit: 'contain' }} />
-                      ) : (
-                        <span style={{ fontSize: '8px', color: '#999', textAlign: 'center', padding: '4px' }}>
-                          {isViewer ? 'No logo' : 'Click to set logo'}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'center', padding: '2px', verticalAlign: 'middle' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '-5px' }}>PROPERTY</div>
-                    <div style={{ fontSize: '15px', fontWeight: 'bold' }}>ACCOUNTABILITY FORM</div>
-                  </td>
-                </div>
-              </tr>
-              <tr>
-                <td colSpan={2} style={{ textAlign: 'right', padding: '2px 4px', fontSize: '10px' }}>
-                  <span style={{ fontWeight: 'bold', fontSize: '13px' }}>PAF No.: </span>
-                  <input
-                    value={form.pafNo}
-                    onChange={(e) => !isViewer && update('pafNo', e.target.value)}
-                    readOnly={isViewer}
-                    style={{ border: 'none', color: '#e53e3e', fontWeight: 'bold', outline: 'none', width: '110px', fontSize: '12px', textAlign: 'center', background: 'transparent', cursor: isViewer ? 'default' : 'text' }}
-                  />
+                      PAF No.:
+                    </span>
+
+                    <input
+                      value={form.pafNo}
+                      onChange={(e) =>
+                        !isViewer && update('pafNo', e.target.value)
+                      }
+                      readOnly={isViewer}
+                      style={{
+                        border: 'none',
+                        outline: 'none',
+                        width: '105px',
+                        padding: '0',
+                        margin: '0',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        color: '#e53e3e',
+                        textAlign: 'right',
+                        background: 'transparent',
+                        cursor: isViewer ? 'default' : 'text',
+                      }}
+                    />
+                  </div>
                 </td>
               </tr>
             </tbody>
           </table>
+
 
           {/* Employee Info */}
           <SectionHeader title="EMPLOYEE INFORMATION" />
@@ -564,6 +656,23 @@ export default function AccountabilityFormPage() {
                               )
                             })}
                           </select>
+                        )}
+                        {form.items.length > 1 && (
+                          <button
+                            onClick={() => removeItem(index)}
+                            title="Remove this row"
+                            style={{
+                              background: 'none',
+                              cursor: 'pointer',
+                              color: '#ef4444',
+                              padding: '1px 4px',
+                              fontSize: '15px',
+                              lineHeight: 1,
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            ×
+                          </button>
                         )}
                       </div>
                     </td>
