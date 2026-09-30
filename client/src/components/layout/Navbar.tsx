@@ -261,7 +261,6 @@ export default function Navbar() {
 
         {showChangePassword && (
           <ChangePasswordModal
-            forced={false}
             onClose={() => setShowChangePassword(false)}
           />
         )}
