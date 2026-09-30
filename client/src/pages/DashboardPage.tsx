@@ -18,7 +18,6 @@ import {
   X,
   RotateCcw,
   GripVertical,
-  Table2,
   Clock,
   Eye,
   EyeOff,
