@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X, Printer } from 'lucide-react'
 import QRCode from 'qrcode'
 
