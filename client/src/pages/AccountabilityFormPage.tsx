@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { tablesApi, rowsApi, pafApi } from '../lib/api'
 import { Printer, ImageIcon, X, Check, Save, Plus, Trash2, Eye } from 'lucide-react'
 import { createPortal } from 'react-dom'
