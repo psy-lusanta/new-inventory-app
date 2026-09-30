@@ -65,7 +65,7 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
   const handlePrint = () => {
     const printWindow = window.open('', '_blank', 'width=500,height=700')
     if (!printWindow) return
-    const cleanQrContent = sortedFields
+    sortedFields
       .filter((f) => !['cost'].includes(f.fieldName.toLowerCase()))
       .map((f) => {
         const value = row.data[f.fieldName]

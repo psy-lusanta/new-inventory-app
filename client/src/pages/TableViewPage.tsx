@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { tablesApi, rowsApi } from "../lib/api";
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Settings,
@@ -13,12 +13,15 @@ import {
   AlertTriangle,
   Columns,
   Check,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
 } from "lucide-react";
 import RowDetailModal from "../components/modals/RowDetailModal";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import ConfirmModal from '../components/modals/ConfirmModal'
-import { SkeletonTable } from '../components/ui/Skeleton'
+import ConfirmModal from "../components/modals/ConfirmModal";
+import { SkeletonTable } from "../components/ui/Skeleton";
 
 interface Field {
   id: string;
@@ -28,7 +31,7 @@ interface Field {
   isStockField: boolean;
   lowStockThreshold: number | null;
   order: number;
-  options?: { label: string; color: string }[]
+  options?: { label: string; color: string }[];
 }
 
 interface InventoryTable {
@@ -64,34 +67,38 @@ export default function TableViewPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterQuery, setFilterQuery] = useState("");
-  const [confirmDeleteRowId, setConfirmDeleteRowId] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [confirmDeleteRowId, setConfirmDeleteRowId] = useState<string | null>(
+    null,
+  );
 
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
-  const createMutation = useMutation({
+  useMutation({
     mutationFn: (data: Record<string, unknown>) => rowsApi.create(id!, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rows', id] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      showToast('Row added successfully')
-      closeModal()
+      queryClient.invalidateQueries({ queryKey: ["rows", id] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      showToast("Row added successfully");
+      closeModal();
     },
     onError: (err: any) => {
-      const message = err.response?.data?.error || 'Failed to save row'
-      setFormError(message)
-      showToast(message, 'error')
+      const message = err.response?.data?.error || "Failed to save row";
+      setFormError(message);
+      showToast(message, "error");
     },
-  })
+  });
 
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<{
-    total: number
-    totalPages: number
-    hasNext: boolean
-    hasPrev: boolean
-  } | null>(null)
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  } | null>(null);
 
-  const LIMIT = 50
+  const LIMIT = 50;
 
   // ─── Column visibility ────────────────────────────────────────────────────
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
@@ -111,69 +118,77 @@ export default function TableViewPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // ─── Selected row state ───────────────────────────────────────────────────
-  const [selectedRow, setSelectedRow] = useState<Row | null>(null)
+  const [selectedRow, setSelectedRow] = useState<Row | null>(null);
 
   // ─── Fetch table + rows ───────────────────────────────────────────────────
   const fetchData = async () => {
-    if (!id) return
+    if (!id) return;
     try {
       const [tableRes, rowsRes] = await Promise.all([
         tablesApi.getOne(id),
         rowsApi.getAll(id, page, LIMIT),
-      ])
-      const fetchedTable = tableRes.data.data
-      setTable(fetchedTable)
-      setRows(rowsRes.data.data)
-      setPagination(rowsRes.data.pagination)
+      ]);
+      const fetchedTable = tableRes.data.data;
+      setTable(fetchedTable);
+      setRows(rowsRes.data.data);
+      setPagination(rowsRes.data.pagination);
 
       // Load saved column visibility, or default to all visible
-      const storageKey = `columns:${user?.id}:${id}`
-      const saved = localStorage.getItem(storageKey)
+      const storageKey = `columns:${user?.id}:${id}`;
+      const saved = localStorage.getItem(storageKey);
 
       if (saved) {
         try {
-          const parsed = JSON.parse(saved)
+          const parsed = JSON.parse(saved);
           // Merge saved prefs with any new fields that didn't exist before
-          const merged: Record<string, boolean> = {}
+          const merged: Record<string, boolean> = {};
           fetchedTable.fields.forEach((f: Field) => {
-            merged[f.fieldName] = parsed[f.fieldName] ?? true
-          })
+            merged[f.fieldName] = parsed[f.fieldName] ?? true;
+          });
           AUTO_FIELDS.forEach((f) => {
-            merged[f.key] = parsed[f.key] ?? true
-          })
-          setVisibleColumns(merged)
+            merged[f.key] = parsed[f.key] ?? true;
+          });
+          setVisibleColumns(merged);
         } catch {
-          const initialVisibility: Record<string, boolean> = {}
-          fetchedTable.fields.forEach((f: Field) => { initialVisibility[f.fieldName] = true })
-          AUTO_FIELDS.forEach((f) => { initialVisibility[f.key] = true })
-          setVisibleColumns(initialVisibility)
+          const initialVisibility: Record<string, boolean> = {};
+          fetchedTable.fields.forEach((f: Field) => {
+            initialVisibility[f.fieldName] = true;
+          });
+          AUTO_FIELDS.forEach((f) => {
+            initialVisibility[f.key] = true;
+          });
+          setVisibleColumns(initialVisibility);
         }
       } else {
-        const initialVisibility: Record<string, boolean> = {}
-        fetchedTable.fields.forEach((f: Field) => { initialVisibility[f.fieldName] = true })
-        AUTO_FIELDS.forEach((f) => { initialVisibility[f.key] = true })
-        setVisibleColumns(initialVisibility)
+        const initialVisibility: Record<string, boolean> = {};
+        fetchedTable.fields.forEach((f: Field) => {
+          initialVisibility[f.fieldName] = true;
+        });
+        AUTO_FIELDS.forEach((f) => {
+          initialVisibility[f.key] = true;
+        });
+        setVisibleColumns(initialVisibility);
       }
     } catch (error) {
-      console.error('Failed to fetch table data:', error)
+      console.error("Failed to fetch table data:", error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData()
-  }, [id, page])
+    fetchData();
+  }, [id, page]);
 
   // ─── Toggle column visibility ─────────────────────────────────────────────
   const toggleColumn = (key: string) => {
     setVisibleColumns((prev) => {
-      const updated = { ...prev, [key]: !prev[key] }
-      const storageKey = `columns:${user?.id}:${id}`
-      localStorage.setItem(storageKey, JSON.stringify(updated))
-      return updated
-    })
-  }
+      const updated = { ...prev, [key]: !prev[key] };
+      const storageKey = `columns:${user?.id}:${id}`;
+      localStorage.setItem(storageKey, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // ─── Open modal for add/edit ──────────────────────────────────────────────
   const openAddModal = () => {
@@ -199,36 +214,39 @@ export default function TableViewPage() {
 
   // ─── Save row ─────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!id || !table) return
-    setFormError('')
+    if (!id || !table) return;
+    setFormError("");
 
     for (const field of table.fields) {
       if (
         field.required &&
-        (formData[field.fieldName] === undefined || formData[field.fieldName] === '')
+        (formData[field.fieldName] === undefined ||
+          formData[field.fieldName] === "")
       ) {
-        setFormError(`"${field.fieldName}" is required`)
-        return
+        setFormError(`"${field.fieldName}" is required`);
+        return;
       }
     }
 
-    setIsSaving(true)
+    setIsSaving(true);
     try {
       if (editingRow) {
-        const res = await rowsApi.update(id, editingRow.id, formData)
-        setRows((prev) => prev.map((r) => (r.id === editingRow.id ? res.data.data : r)))
+        const res = await rowsApi.update(id, editingRow.id, formData);
+        setRows((prev) =>
+          prev.map((r) => (r.id === editingRow.id ? res.data.data : r)),
+        );
       } else {
-        const res = await rowsApi.create(id, formData)
-        setRows((prev) => [...prev, res.data.data]) // ← append to bottom (asc)
+        const res = await rowsApi.create(id, formData);
+        setRows((prev) => [...prev, res.data.data]); // ← append to bottom (asc)
       }
-      closeModal()
-      showToast('Row saved successfully')
+      closeModal();
+      showToast("Row saved successfully");
     } catch (err: any) {
-      setFormError(err.response?.data?.error || 'Failed to save row')
+      setFormError(err.response?.data?.error || "Failed to save row");
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   // ─── Delete row ───────────────────────────────────────────────────────────
   const handleDelete = async (rowId: string) => {
@@ -249,25 +267,89 @@ export default function TableViewPage() {
 
   // ─── Filter rows ──────────────────────────────────────────────────────────
   const filteredRows = rows.filter((row) => {
-    if (!filterQuery.trim()) return true
-    const q = filterQuery.toLowerCase()
+    if (!filterQuery.trim()) return true;
+    const q = filterQuery.toLowerCase();
     const dataMatch = Object.values(row.data).some((val) =>
-      String(val).toLowerCase().includes(q)
-    )
-    const createdByMatch = row.user?.name?.toLowerCase().includes(q) ?? false
-    const updatedByMatch = row.updatedByUser?.name?.toLowerCase().includes(q) ?? false
-    return dataMatch || createdByMatch || updatedByMatch
-  })
+      String(val).toLowerCase().includes(q),
+    );
+    const createdByMatch = row.user?.name?.toLowerCase().includes(q) ?? false;
+    const updatedByMatch =
+      row.updatedByUser?.name?.toLowerCase().includes(q) ?? false;
+    return dataMatch || createdByMatch || updatedByMatch;
+  });
+
+  // ─── Sort handling ────────────────────────────────────────────────────────
+  const handleSort = (fieldKey: string) => {
+    if (sortField === fieldKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(fieldKey);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortValue = (row: Row, fieldKey: string) => {
+    switch (fieldKey) {
+      case "createdBy":
+        return row.user?.name ?? "";
+      case "createdAt":
+        return row.createdAt;
+      case "updatedBy":
+        return row.updatedByUser?.name ?? "";
+      case "updatedAt":
+        return row.updatedBy ? row.updatedAt : "";
+      default:
+        return row.data[fieldKey];
+    }
+  };
+
+  const compareValues = (a: any, b: any): number => {
+    const aEmpty = a === undefined || a === null || a === "";
+    const bEmpty = b === undefined || b === null || b === "";
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1; // empty values sort last regardless of direction
+    if (bEmpty) return -1;
+
+    if (typeof a === "boolean" || typeof b === "boolean") {
+      return Number(a) - Number(b);
+    }
+
+    // "numeric: true" makes this a natural sort — e.g. GT-MT-003 < GT-MT-004 < GT-MT-010
+    return String(a).localeCompare(String(b), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  };
+
+  const sortedRows = [...filteredRows].sort((a, b) => {
+    if (!sortField) return 0;
+    const result = compareValues(
+      getSortValue(a, sortField),
+      getSortValue(b, sortField),
+    );
+    return sortDirection === "asc" ? result : -result;
+  });
+
+  const SortIcon = ({ fieldKey }: { fieldKey: string }) =>
+    sortField === fieldKey ? (
+      sortDirection === "asc" ? (
+        <ChevronUp size={12} />
+      ) : (
+        <ChevronDown size={12} />
+      )
+    ) : (
+      <ArrowUpDown size={12} className="opacity-30" />
+    );
 
   // ─── Render field input ───────────────────────────────────────────────────
   const renderInput = (field: Field) => {
-    const value = formData[field.fieldName] ?? ''
+    const value = formData[field.fieldName] ?? "";
     const baseClass =
-      'w-full px-3 py-2 text-sm border border-gray-200 dark:border-[#2a2d3e] rounded-lg bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500'
-    const isCost = field.fieldName.toLowerCase() === 'cost'
+      "w-full px-3 py-2 text-sm border border-gray-200 dark:border-[#2a2d3e] rounded-lg bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500";
+    const isCost = field.fieldName.toLowerCase() === "cost";
 
     switch (field.fieldType) {
-      case 'number':
+      case "number":
         return (
           <div className="relative">
             {isCost && (
@@ -281,45 +363,53 @@ export default function TableViewPage() {
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  [field.fieldName]: e.target.value === '' ? '' : Number(e.target.value),
+                  [field.fieldName]:
+                    e.target.value === "" ? "" : Number(e.target.value),
                 })
               }
-              className={`${baseClass} ${isCost ? 'pl-7' : ''}`}
-              min={isCost ? '0' : undefined}
-              step={isCost ? '0.01' : undefined}
+              className={`${baseClass} ${isCost ? "pl-7" : ""}`}
+              min={isCost ? "0" : undefined}
+              step={isCost ? "0.01" : undefined}
             />
           </div>
-        )
+        );
 
-      case 'date':
+      case "date":
         return (
           <input
             type="date"
             value={value}
-            onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, [field.fieldName]: e.target.value })
+            }
             className={baseClass}
           />
-        )
+        );
 
-      case 'boolean':
+      case "boolean":
         return (
           <select
-            value={value === true || value === 'true' ? 'true' : 'false'}
+            value={value === true || value === "true" ? "true" : "false"}
             onChange={(e) =>
-              setFormData({ ...formData, [field.fieldName]: e.target.value === 'true' })
+              setFormData({
+                ...formData,
+                [field.fieldName]: e.target.value === "true",
+              })
             }
             className={baseClass}
           >
             <option value="true">Yes</option>
             <option value="false">No</option>
           </select>
-        )
+        );
 
-      case 'dropdown':
+      case "dropdown":
         return (
           <select
             value={value}
-            onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, [field.fieldName]: e.target.value })
+            }
             className={baseClass}
           >
             <option value="">Select an option...</option>
@@ -329,66 +419,85 @@ export default function TableViewPage() {
               </option>
             ))}
           </select>
-        )
+        );
 
       default:
         return (
           <input
             type="text"
             value={value}
-            onChange={(e) => setFormData({ ...formData, [field.fieldName]: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, [field.fieldName]: e.target.value })
+            }
             className={baseClass}
           />
-        )
+        );
     }
-  }
+  };
 
   // ─── Render cell value ────────────────────────────────────────────────────
   const renderCellValue = (field: Field, value: any) => {
-    if (value === undefined || value === null || value === '') {
-      return <span className="text-gray-300 dark:text-gray-600">—</span>
+    if (value === undefined || value === null || value === "") {
+      return <span className="text-gray-300 dark:text-gray-600">—</span>;
     }
 
     // Cost field — show in green with PHP currency
-    if (field.fieldName.toLowerCase() === 'cost' && field.fieldType === 'number') {
-      const num = Number(value)
+    if (
+      field.fieldName.toLowerCase() === "cost" &&
+      field.fieldType === "number"
+    ) {
+      const num = Number(value);
       if (!isNaN(num)) {
         return (
           <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-            {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(num)}
+            {new Intl.NumberFormat("en-PH", {
+              style: "currency",
+              currency: "PHP",
+            }).format(num)}
           </span>
-        )
+        );
       }
     }
 
-    if (field.fieldType === 'boolean') {
+    if (field.fieldType === "boolean") {
       return (
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${value === true || value === 'true'
-          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-          }`}>
-          {value === true || value === 'true' ? 'Yes' : 'No'}
+        <span
+          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+            value === true || value === "true"
+              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+          }`}
+        >
+          {value === true || value === "true" ? "Yes" : "No"}
         </span>
-      )
+      );
     }
 
     if (field.isStockField) {
-      const isLow = field.lowStockThreshold !== null && Number(value) <= field.lowStockThreshold
+      const isLow =
+        field.lowStockThreshold !== null &&
+        Number(value) <= field.lowStockThreshold;
       return (
         <div className="flex items-center gap-1.5">
-          <span className={isLow ? 'text-red-600 dark:text-red-400 font-semibold' : ''}>{value}</span>
+          <span
+            className={
+              isLow ? "text-red-600 dark:text-red-400 font-semibold" : ""
+            }
+          >
+            {value}
+          </span>
           {isLow && <AlertTriangle size={13} className="text-red-500" />}
         </div>
-      )
+      );
     }
 
-    if (field.fieldType === 'date' && value) {
-      return new Date(value).toLocaleDateString()
+    if (field.fieldType === "date" && value) {
+      return new Date(value).toLocaleDateString();
     }
 
-    if (field.fieldType === 'dropdown' && field.options) {
-      const options = field.options as { label: string; color: string }[]
-      const option = options.find((o) => o.label === String(value))
+    if (field.fieldType === "dropdown" && field.options) {
+      const options = field.options as { label: string; color: string }[];
+      const option = options.find((o) => o.label === String(value));
       if (option) {
         return (
           <span
@@ -401,13 +510,13 @@ export default function TableViewPage() {
           >
             {option.label}
           </span>
-        )
+        );
       }
-      return <span className="text-gray-500">{String(value)}</span>
+      return <span className="text-gray-500">{String(value)}</span>;
     }
 
-    return String(value)
-  }
+    return String(value);
+  };
 
   const columnPickerRef = useRef<HTMLDivElement>(null);
   const columnDropdownRef = useRef<HTMLDivElement>(null);
@@ -439,7 +548,7 @@ export default function TableViewPage() {
         <div className="h-4 bg-gray-200 dark:bg-[#2a2d3e] rounded w-24 animate-pulse" />
         <SkeletonTable />
       </div>
-    )
+    );
   }
 
   if (!table) {
@@ -493,7 +602,10 @@ export default function TableViewPage() {
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         <div className="relative flex-1 sm:max-w-sm">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search
+            size={15}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
           <input
             type="text"
             value={filterQuery}
@@ -503,7 +615,7 @@ export default function TableViewPage() {
           />
           {filterQuery && (
             <button
-              onClick={() => setFilterQuery('')}
+              onClick={() => setFilterQuery("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
               <X size={14} />
@@ -523,27 +635,42 @@ export default function TableViewPage() {
                   .map((field, idx) => (
                     <th
                       key={field.id}
-                      className={`text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap ${idx === 0 ? 'sticky left-0 z-40 bg-gray-50 dark:bg-[#0f1117]' : ''
-                        }`}
+                      className={`text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap ${
+                        idx === 0
+                          ? "sticky left-0 z-40 bg-gray-50 dark:bg-[#0f1117]"
+                          : ""
+                      }`}
                     >
-                      <div className="flex items-center gap-1.5">
-                        {field.fieldName}
+                      <button
+                        onClick={() => handleSort(field.fieldName)}
+                        className="flex items-center gap-1.5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                      >
+                        <span>{field.fieldName}</span>
                         {field.isStockField && (
                           <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full normal-case font-medium">
                             stock
                           </span>
                         )}
-                      </div>
+                        <SortIcon fieldKey={field.fieldName} />
+                      </button>
                     </th>
                   ))}
-                {AUTO_FIELDS.filter((f) => visibleColumns[f.key]).map((field) => (
-                  <th
-                    key={field.key}
-                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
-                  >
-                    {field.label}
-                  </th>
-                ))}
+                {AUTO_FIELDS.filter((f) => visibleColumns[f.key]).map(
+                  (field) => (
+                    <th
+                      key={field.key}
+                      className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                    >
+                      <button
+                        onClick={() => handleSort(field.key)}
+                        className="flex items-center gap-1.5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                      >
+                        <span>{field.label}</span>
+                        <SortIcon fieldKey={field.key} />
+                      </button>
+                    </th>
+                  ),
+                )}
                 {isStaffOrAdmin && (
                   <th className="sticky right-0 z-40 bg-gray-50 dark:bg-[#0f1117] px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     <div className="flex items-center justify-between gap-2">
@@ -563,58 +690,65 @@ export default function TableViewPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-[#2a2d3e] cursor-pointer">
-              {filteredRows.length === 0 ? (
+              {sortedRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={table.fields.length + 5}
                     className="px-4 py-12 text-center text-gray-400 text-sm"
                   >
-                    {filterQuery ? `No rows match "${filterQuery}"` : 'No rows yet — add one!'}
+                    {filterQuery
+                      ? `No rows match "${filterQuery}"`
+                      : "No rows yet — add one!"}
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((row) => (
+                sortedRows.map((row) => (
                   <tr
                     key={row.id}
                     onClick={() => setSelectedRow(row)}
-                    className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-all duration-150 group cursor-pointer border-l-2 border-transparent hover:border-indigo-400 dark:hover:border-indigo-500">
+                    className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-all duration-150 group cursor-pointer border-l-2 border-transparent hover:border-indigo-400 dark:hover:border-indigo-500"
+                  >
                     {table.fields
                       .filter((f) => visibleColumns[f.fieldName])
                       .map((field, idx) => (
                         <td
                           key={field.id}
-                          className={`px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap ${idx === 0
-                            ? 'sticky left-0 z-10 bg-white dark:bg-[#1a1d2e] group-hover:bg-gray-50 dark:group-hover:bg-[#0f1117]'
-                            : ''
-                            }`}
+                          className={`px-4 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap ${
+                            idx === 0
+                              ? "sticky left-0 z-10 bg-white dark:bg-[#1a1d2e] group-hover:bg-gray-50 dark:group-hover:bg-[#0f1117]"
+                              : ""
+                          }`}
                         >
                           {renderCellValue(field, row.data[field.fieldName])}
                         </td>
                       ))}
-                    {visibleColumns['createdBy'] && (
+                    {visibleColumns["createdBy"] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
-                        {row.user?.name ?? '—'}
+                        {row.user?.name ?? "—"}
                       </td>
                     )}
-                    {visibleColumns['createdAt'] && (
+                    {visibleColumns["createdAt"] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
                         {new Date(row.createdAt).toLocaleDateString()}
                       </td>
                     )}
-                    {visibleColumns['updatedBy'] && (
+                    {visibleColumns["updatedBy"] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
-                        {row.updatedByUser?.name ?? '—'}
+                        {row.updatedByUser?.name ?? "—"}
                       </td>
                     )}
-                    {visibleColumns['updatedAt'] && (
+                    {visibleColumns["updatedAt"] && (
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap text-xs">
-                        {row.updatedBy ? new Date(row.updatedAt).toLocaleDateString() : '—'}
+                        {row.updatedBy
+                          ? new Date(row.updatedAt).toLocaleDateString()
+                          : "—"}
                       </td>
                     )}
                     {isStaffOrAdmin && (
                       <td
                         onClick={(e) => e.stopPropagation()}
-                        className="sticky right-0 z-10 bg-white dark:bg-[#1a1d2e] group-hover:bg-gray-50 dark:group-hover:bg-[#0f1117] px-4 py-3 whitespace-nowrap">
+                        className="sticky right-0 z-10 bg-white dark:bg-[#1a1d2e] group-hover:bg-gray-50 dark:group-hover:bg-[#0f1117] px-4 py-3 whitespace-nowrap"
+                      >
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => openEditModal(row)}
@@ -623,7 +757,10 @@ export default function TableViewPage() {
                             <Pencil size={14} />
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteRowId(row.id) }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteRowId(row.id);
+                            }}
                             disabled={deletingId === row.id}
                             className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
                           >
@@ -641,66 +778,77 @@ export default function TableViewPage() {
       </div>
 
       {/* Add/Edit Row Modal */}
-      {showRowModal && createPortal(
-        <div
-          className="custom-scrollbar fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4"
-          style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', backgroundColor: 'rgba(0,0,0,0.6)' }}
-        >
+      {showRowModal &&
+        createPortal(
           <div
-            className="bg-white dark:bg-[#1a1d2e] rounded-none sm:rounded-2xl shadow-xl w-full h-full sm:h-auto sm:max-w-md sm:max-h-[90vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+            className="custom-scrollbar fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4"
+            style={{
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              backgroundColor: "rgba(0,0,0,0.6)",
+            }}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3e]">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                {editingRow ? 'Edit Row' : 'Add Row'}
-              </h2>
-              <button
-                onClick={closeModal}
-                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] transition-colors"
-              >
-                <X size={18} />
-              </button>
+            <div
+              className="bg-white dark:bg-[#1a1d2e] rounded-none sm:rounded-2xl shadow-xl w-full h-full sm:h-auto sm:max-w-md sm:max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3e]">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                  {editingRow ? "Edit Row" : "Add Row"}
+                </h2>
+                <button
+                  onClick={closeModal}
+                  className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {table.fields.map((field) => (
+                  <div key={field.id}>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {field.fieldName}
+                      {field.required && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
+                      {field.isStockField && (
+                        <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-full">
+                          stock
+                        </span>
+                      )}
+                    </label>
+                    {renderInput(field)}
+                  </div>
+                ))}
+                {formError && (
+                  <p className="text-red-500 text-sm bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">
+                    {formError}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-[#2a2d3e]">
+                <button
+                  onClick={closeModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isSaving
+                    ? "Saving..."
+                    : editingRow
+                      ? "Save Changes"
+                      : "Add Row"}
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {table.fields.map((field) => (
-                <div key={field.id}>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {field.fieldName}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
-                    {field.isStockField && (
-                      <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-full">
-                        stock
-                      </span>
-                    )}
-                  </label>
-                  {renderInput(field)}
-                </div>
-              ))}
-              {formError && (
-                <p className="text-red-500 text-sm bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">
-                  {formError}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-[#2a2d3e]">
-              <button
-                onClick={closeModal}
-                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2a2d3e] rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-50"
-              >
-                {isSaving ? 'Saving...' : editingRow ? 'Save Changes' : 'Add Row'}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* Column Picker */}
       {showColumnPicker &&
@@ -749,10 +897,11 @@ export default function TableViewPage() {
                     )}
                   </div>
                   <div
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${visibleColumns[field.fieldName]
-                      ? "bg-indigo-600 border-indigo-600"
-                      : "border-gray-300 dark:border-gray-600"
-                      }`}
+                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                      visibleColumns[field.fieldName]
+                        ? "bg-indigo-600 border-indigo-600"
+                        : "border-gray-300 dark:border-gray-600"
+                    }`}
                   >
                     {visibleColumns[field.fieldName] && (
                       <Check size={11} className="text-white" />
@@ -771,10 +920,11 @@ export default function TableViewPage() {
                 >
                   <span>{field.label}</span>
                   <div
-                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${visibleColumns[field.key]
-                      ? "bg-indigo-600 border-indigo-600"
-                      : "border-gray-300 dark:border-gray-600"
-                      }`}
+                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                      visibleColumns[field.key]
+                        ? "bg-indigo-600 border-indigo-600"
+                        : "border-gray-300 dark:border-gray-600"
+                    }`}
                   >
                     {visibleColumns[field.key] && (
                       <Check size={11} className="text-white" />
@@ -791,8 +941,15 @@ export default function TableViewPage() {
       {rows.length > 0 && (
         <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-[#1a1d2e] border border-gray-100 dark:border-[#2a2d3e] rounded-xl text-xs text-gray-500 dark:text-gray-400">
           <span>
-            Showing <span className="font-semibold text-gray-900 dark:text-white">{filteredRows.length}</span> of{' '}
-            <span className="font-semibold text-gray-900 dark:text-white">{rows.length}</span> records
+            Showing{" "}
+            <span className="font-semibold text-gray-900 dark:text-white">
+              {filteredRows.length}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-gray-900 dark:text-white">
+              {rows.length}
+            </span>{" "}
+            records
             {filterQuery && ` matching "${filterQuery}"`}
           </span>
         </div>
@@ -802,9 +959,15 @@ export default function TableViewPage() {
       {pagination && pagination.totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-[#1a1d2e] border border-gray-100 dark:border-[#2a2d3e] rounded-xl">
           <span className="text-xs text-gray-500 dark:text-gray-400">
-            Page <span className="font-semibold text-gray-900 dark:text-white">{page}</span> of{' '}
-            <span className="font-semibold text-gray-900 dark:text-white">{pagination.totalPages}</span>
-            {' '}· {pagination.total} total records
+            Page{" "}
+            <span className="font-semibold text-gray-900 dark:text-white">
+              {page}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-gray-900 dark:text-white">
+              {pagination.totalPages}
+            </span>{" "}
+            · {pagination.total} total records
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -816,30 +979,34 @@ export default function TableViewPage() {
             </button>
             {/* Page numbers */}
             <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                let pageNum: number
-                if (pagination.totalPages <= 5) {
-                  pageNum = i + 1
-                } else if (page <= 3) {
-                  pageNum = i + 1
-                } else if (page >= pagination.totalPages - 2) {
-                  pageNum = pagination.totalPages - 4 + i
-                } else {
-                  pageNum = page - 2 + i
-                }
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setPage(pageNum)}
-                    className={`w-7 h-7 text-xs font-medium rounded-lg transition-colors ${pageNum === page
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-gray-200 dark:border-[#2a2d3e] hover:bg-gray-50 dark:hover:bg-[#2a2d3e] text-gray-600 dark:text-gray-400'
+              {Array.from(
+                { length: Math.min(5, pagination.totalPages) },
+                (_, i) => {
+                  let pageNum: number;
+                  if (pagination.totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (page <= 3) {
+                    pageNum = i + 1;
+                  } else if (page >= pagination.totalPages - 2) {
+                    pageNum = pagination.totalPages - 4 + i;
+                  } else {
+                    pageNum = page - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`w-7 h-7 text-xs font-medium rounded-lg transition-colors ${
+                        pageNum === page
+                          ? "bg-indigo-600 text-white"
+                          : "border border-gray-200 dark:border-[#2a2d3e] hover:bg-gray-50 dark:hover:bg-[#2a2d3e] text-gray-600 dark:text-gray-400"
                       }`}
-                  >
-                    {pageNum}
-                  </button>
-                )
-              })}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                },
+              )}
             </div>
             <button
               onClick={() => setPage((p) => p + 1)}
@@ -853,27 +1020,30 @@ export default function TableViewPage() {
       )}
 
       {/* ------ Row Detail Modal ------ */}
-      {selectedRow && table && createPortal(
-        <RowDetailModal
-          row={selectedRow}
-          fields={table.fields}
-          tableName={table.name}
-          onClose={() => setSelectedRow(null)}
-        />,
-        document.body
-      )}
+      {selectedRow &&
+        table &&
+        createPortal(
+          <RowDetailModal
+            row={selectedRow}
+            fields={table.fields}
+            tableName={table.name}
+            onClose={() => setSelectedRow(null)}
+          />,
+          document.body,
+        )}
 
       {/* ------ Delete Modal ------ */}
-      {confirmDeleteRowId && createPortal(
-        <ConfirmModal
-          title="Delete Row"
-          message="Are you sure you want to delete this row? This cannot be undone."
-          confirmLabel="Delete Row"
-          onConfirm={() => handleDelete(confirmDeleteRowId)}
-          onClose={() => setConfirmDeleteRowId(null)}
-        />,
-        document.body
-      )}
+      {confirmDeleteRowId &&
+        createPortal(
+          <ConfirmModal
+            title="Delete Row"
+            message="Are you sure you want to delete this row? This cannot be undone."
+            confirmLabel="Delete Row"
+            onConfirm={() => handleDelete(confirmDeleteRowId)}
+            onClose={() => setConfirmDeleteRowId(null)}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

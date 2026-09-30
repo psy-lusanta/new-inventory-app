@@ -319,7 +319,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [dropdownStats, setDropdownStats] = useState<DropdownStat[]>([]);
-  const [assetTagStats, setAssetTagStats] = useState<AssetTagStat[]>([]);
+  const [, setAssetTagStats] = useState<AssetTagStat[]>([]);
   const [costStats, setCostStats] = useState<CostStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 

@@ -244,7 +244,7 @@ export default function AccountabilityFormPage() {
         const res = await pafApi.createForm(form)
         setActiveFormId(res.data.data.id)
         // Get next PAF no for next new form
-        const nextRes = await pafApi.getNextPafNo()
+        await pafApi.getNextPafNo()
         showToast(`Saved as ${form.pafNo}`)
       }
       fetchForms()

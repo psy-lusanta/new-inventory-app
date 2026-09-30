@@ -56,7 +56,6 @@ export default function CostPage() {
   }
 
   const isCurrentYear = selectedYear === currentYear
-  const maxBar = Math.max(...(stats?.monthlyTrend ?? []).map((m) => m.total), 1)
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">

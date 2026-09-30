@@ -31,7 +31,6 @@ export default function Layout() {
       {/* Force password change on first login */}
       {showChangePassword && (
         <ChangePasswordModal
-          forced={true}
           onClose={() => setPasswordDismissed(true)}
         />
       )}
