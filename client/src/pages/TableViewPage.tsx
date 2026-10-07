@@ -16,6 +16,7 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
+  TriangleAlert,
 } from "lucide-react";
 import RowDetailModal from "../components/modals/RowDetailModal";
 import { useAuth } from "../context/AuthContext";
@@ -341,6 +342,17 @@ export default function TableViewPage() {
       <ArrowUpDown size={12} className="opacity-30" />
     );
 
+  const checkDuplicate = (field: Field, value: string): string | null => {
+    if (!value.trim() || !field.required) return null;
+    const existing = rows.find(
+      (r) =>
+        r.id !== editingRow?.id &&
+        String(r.data[field.fieldName] ?? "").toLowerCase() ===
+          value.toLowerCase(),
+    );
+    return existing ? `"${value}" is already used in this table` : null;
+  };
+
   // ─── Render field input ───────────────────────────────────────────────────
   const renderInput = (field: Field) => {
     const value = formData[field.fieldName] ?? "";
@@ -349,30 +361,40 @@ export default function TableViewPage() {
     const isCost = field.fieldName.toLowerCase() === "cost";
 
     switch (field.fieldType) {
-      case "number":
+      case "number": {
+        const value = formData[field.fieldName] ?? "";
+        const dupWarning = checkDuplicate(field, String(value));
         return (
-          <div className="relative">
-            {isCost && (
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
-                ₱
-              </span>
+          <div>
+            <div className="relative">
+              {isCost && (
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
+                  ₱
+                </span>
+              )}
+              <input
+                type="number"
+                value={value}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    [field.fieldName]:
+                      e.target.value === "" ? "" : Number(e.target.value),
+                  })
+                }
+                className={`${baseClass} ${isCost ? "pl-7" : ""} ${dupWarning ? "border-amber-400 focus:ring-amber-400" : ""}`}
+                min={isCost ? "0" : undefined}
+                step={isCost ? "0.01" : undefined}
+              />
+            </div>
+            {dupWarning && (
+              <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+                {dupWarning}
+              </p>
             )}
-            <input
-              type="number"
-              value={value}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  [field.fieldName]:
-                    e.target.value === "" ? "" : Number(e.target.value),
-                })
-              }
-              className={`${baseClass} ${isCost ? "pl-7" : ""}`}
-              min={isCost ? "0" : undefined}
-              step={isCost ? "0.01" : undefined}
-            />
           </div>
         );
+      }
 
       case "date":
         return (
@@ -421,17 +443,28 @@ export default function TableViewPage() {
           </select>
         );
 
-      default:
+      default: {
+        const value = formData[field.fieldName] ?? "";
+        const dupWarning = checkDuplicate(field, String(value));
         return (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) =>
-              setFormData({ ...formData, [field.fieldName]: e.target.value })
-            }
-            className={baseClass}
-          />
+          <div>
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => {
+                setFormData({ ...formData, [field.fieldName]: e.target.value });
+                setFormError("");
+              }}
+              className={`${baseClass} ${dupWarning ? "border-amber-400 focus:ring-amber-400" : ""}`}
+            />
+            {dupWarning && (
+              <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+                 {dupWarning}
+              </p>
+            )}
+          </div>
         );
+      }
     }
   };
 
