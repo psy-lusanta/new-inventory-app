@@ -16,7 +16,6 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
-  TriangleAlert,
 } from "lucide-react";
 import RowDetailModal from "../components/modals/RowDetailModal";
 import { useAuth } from "../context/AuthContext";
