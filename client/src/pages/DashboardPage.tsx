@@ -24,8 +24,6 @@ import {
   Check,
   TrendingUp,
   Star,
-  TrendingDown,
-  Table2,
 } from "lucide-react";
 import {
   DndContext,
