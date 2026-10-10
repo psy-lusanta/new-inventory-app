@@ -98,8 +98,6 @@ export default function TableViewPage() {
     hasPrev: boolean;
   } | null>(null);
 
-  const LIMIT = 50;
-
   // ─── Column visibility ────────────────────────────────────────────────────
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
     {},
