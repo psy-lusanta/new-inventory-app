@@ -47,42 +47,84 @@ const checkUniqueFields = async (
 export const getRows = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { tableId } = req.params
-    const page = parseInt(req.query.page as string ?? '1', 10)
-    const limit = parseInt(req.query.limit as string ?? '50', 10)
+    const page = parseInt((req.query.page as string) ?? '1', 10)
+    const limit = parseInt((req.query.limit as string) ?? '50', 10)
     const skip = (page - 1) * limit
+    const sortField = req.query.sortField as string | undefined
+    const sortDir = req.query.sortDir === 'desc' ? 'DESC' : 'ASC'
 
-    const [rows, total] = await Promise.all([
-      prisma.inventoryRow.findMany({
+    const table = await prisma.inventoryTable.findUnique({
+      where: { id: tableId },
+      include: { fields: true },
+    })
+
+    if (!table) {
+      res.status(404).json({ success: false, error: 'Table not found' })
+      return
+    }
+
+    const [total] = await Promise.all([
+      prisma.inventoryRow.count({ where: { tableId } }),
+    ])
+
+    const validField = sortField
+      ? table.fields.find((f) => f.fieldName === sortField)
+      : null
+
+    let rows: any[]
+
+    if (validField) {
+      const isNumber = validField.fieldType === 'number'
+      // Use raw SQL for JSONB field sorting
+      const query = isNumber
+        ? `
+          SELECT r.*,
+            json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
+            CASE WHEN ub.id IS NOT NULL 
+              THEN json_build_object('id', ub.id, 'name', ub.name, 'email', ub.email)
+              ELSE NULL END as "updatedByUser"
+          FROM "InventoryRow" r
+          LEFT JOIN "User" u ON u.id = r."createdBy"
+          LEFT JOIN "User" ub ON ub.id = r."updatedBy"
+          WHERE r."tableId" = $1
+          ORDER BY 
+            CASE WHEN r.data->>'${validField.fieldName}' IS NULL THEN 1 ELSE 0 END,
+            (r.data->>'${validField.fieldName}')::numeric ${sortDir} NULLS LAST
+          LIMIT $2 OFFSET $3
+        `
+        : `
+          SELECT r.*,
+            json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
+            CASE WHEN ub.id IS NOT NULL 
+              THEN json_build_object('id', ub.id, 'name', ub.name, 'email', ub.email)
+              ELSE NULL END as "updatedByUser"
+          FROM "InventoryRow" r
+          LEFT JOIN "User" u ON u.id = r."createdBy"
+          LEFT JOIN "User" ub ON ub.id = r."updatedBy"
+          WHERE r."tableId" = $1
+          ORDER BY 
+            CASE WHEN r.data->>'${validField.fieldName}' IS NULL THEN 1 ELSE 0 END,
+            r.data->>'${validField.fieldName}' ${sortDir} NULLS LAST
+          LIMIT $2 OFFSET $3
+        `
+
+      rows = await prisma.$queryRawUnsafe(query, tableId, limit, skip)
+    } else {
+      rows = await prisma.inventoryRow.findMany({
         where: { tableId },
         orderBy: { createdAt: 'asc' },
         skip,
         take: limit,
         include: {
           user: { select: { id: true, name: true, email: true } },
+          updatedByUser: { select: { id: true, name: true, email: true } },
         },
-      }),
-      prisma.inventoryRow.count({ where: { tableId } }),
-    ])
-
-    // Collect all unique updatedBy IDs in ONE query instead of N queries
-    const updatedByIds = [...new Set(rows.map((r) => r.updatedBy).filter(Boolean))] as string[]
-    const updatedByUsers = updatedByIds.length > 0
-      ? await prisma.user.findMany({
-        where: { id: { in: updatedByIds } },
-        select: { id: true, name: true, email: true },
       })
-      : []
-
-    const updatedByMap = Object.fromEntries(updatedByUsers.map((u) => [u.id, u]))
-
-    const rowsWithUsers = rows.map((row) => ({
-      ...row,
-      updatedByUser: row.updatedBy ? (updatedByMap[row.updatedBy] ?? null) : null,
-    }))
+    }
 
     res.json({
       success: true,
-      data: rowsWithUsers,
+      data: rows,
       pagination: {
         page, limit, total,
         totalPages: Math.ceil(total / limit),

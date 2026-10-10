@@ -1,80 +1,89 @@
-import { useEffect, useState } from 'react'
-import { X, Printer } from 'lucide-react'
-import QRCode from 'qrcode'
+import { useEffect, useState } from "react";
+import { X, Printer } from "lucide-react";
+import QRCode from "qrcode";
 
 interface Field {
-  id: string
-  fieldName: string
-  fieldType: string
-  required: boolean
-  isStockField: boolean
-  order: number
+  id: string;
+  fieldName: string;
+  fieldType: string;
+  required: boolean;
+  isStockField: boolean;
+  order: number;
 }
 
 interface Row {
-  id: string
-  data: Record<string, any>
-  createdAt: string
-  updatedAt: string
-  updatedBy: string | null
-  user: { name: string }
-  updatedByUser: { name: string } | null
+  id: string;
+  data: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+  user: { name: string };
+  updatedByUser: { name: string } | null;
 }
 
 interface Props {
-  row: Row
-  fields: Field[]
-  tableName: string
-  onClose: () => void
+  row: Row;
+  fields: Field[];
+  tableName: string;
+  onClose: () => void;
 }
 
-export default function RowDetailModal({ row, fields, tableName, onClose }: Props) {
-  const [qrDataUrl, setQrDataUrl] = useState<string>('')
+export default function RowDetailModal({
+  row,
+  fields,
+  tableName,
+  onClose,
+}: Props) {
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
   // ─── Sort fields by order ─────────────────────────────────────────────────
-  const sortedFields = [...fields].sort((a, b) => a.order - b.order)
+  const sortedFields = [...fields].sort((a, b) => a.order - b.order);
 
   // ─── Bottom label: first column's value ───────────────────────────────────
-  const firstField = sortedFields[0]
+  const firstField = sortedFields[0];
   const bottomLabel = firstField
-    ? String(row.data[firstField.fieldName] ?? '')
-    : row.id.slice(0, 8).toUpperCase()
+    ? String(row.data[firstField.fieldName] ?? "")
+    : row.id.slice(0, 8).toUpperCase();
 
   // Fields to always exclude from QR
-  const QR_EXCLUDED_FIELDS = ['cost', 'Cost', 'COST']
+  const QR_EXCLUDED_FIELDS = ["cost", "Cost", "COST"];
 
   // Build QR content — skip empty fields AND excluded fields
   const qrContent = sortedFields
-    .filter((f) => !QR_EXCLUDED_FIELDS.map(e => e.toLowerCase()).includes(f.fieldName.toLowerCase()))
+    .filter(
+      (f) =>
+        !QR_EXCLUDED_FIELDS.map((e) => e.toLowerCase()).includes(
+          f.fieldName.toLowerCase(),
+        ),
+    )
     .map((f) => {
-      const value = row.data[f.fieldName]
-      if (value === undefined || value === null || value === '') return null
-      return `${f.fieldName}: ${value}`
+      const value = row.data[f.fieldName];
+      if (value === undefined || value === null || value === "") return null;
+      return `${f.fieldName}: ${value}`;
     })
     .filter(Boolean)
-    .join('\n')
+    .join("\n");
 
   useEffect(() => {
     QRCode.toDataURL(qrContent, {
       width: 300,
       margin: 2,
-      color: { dark: '#000000', light: '#ffffff' },
-    }).then(setQrDataUrl)
-  }, [qrContent])
+      color: { dark: "#000000", light: "#ffffff" },
+    }).then(setQrDataUrl);
+  }, [qrContent]);
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=500,height=700')
-    if (!printWindow) return
+    const printWindow = window.open("", "_blank", "width=500,height=700");
+    if (!printWindow) return;
     sortedFields
-      .filter((f) => !['cost'].includes(f.fieldName.toLowerCase()))
+      .filter((f) => !["cost"].includes(f.fieldName.toLowerCase()))
       .map((f) => {
-        const value = row.data[f.fieldName]
-        if (value === undefined || value === null || value === '') return null
-        return `${f.fieldName}: ${value}`
+        const value = row.data[f.fieldName];
+        if (value === undefined || value === null || value === "") return null;
+        return `${f.fieldName}: ${value}`;
       })
       .filter(Boolean)
-      .join('\n')
-
+      .join("\n");
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -159,41 +168,47 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
           </script>
         </body>
       </html>
-    `)
-    printWindow.document.close()
-  }
+    `);
+    printWindow.document.close();
+  };
 
   const renderValue = (field: Field) => {
-    const value = row.data[field.fieldName]
-    if (value === undefined || value === null || value === '') {
-      return <span className="text-gray-400 dark:text-gray-600">—</span>
+    const value = row.data[field.fieldName];
+    if (value === undefined || value === null || value === "") {
+      return <span className="text-gray-400 dark:text-gray-600">—</span>;
     }
-    if (field.fieldType === 'boolean') {
+    if (field.fieldType === "boolean") {
       return (
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${value === true || value === 'true'
-          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-          }`}>
-          {value === true || value === 'true' ? 'Yes' : 'No'}
+        <span
+          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+            value === true || value === "true"
+              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+          }`}
+        >
+          {value === true || value === "true" ? "Yes" : "No"}
         </span>
-      )
+      );
     }
-    if (field.fieldType === 'date' && value) {
-      return new Date(value).toLocaleDateString()
+    if (field.fieldType === "date" && value) {
+      return new Date(value).toLocaleDateString();
     }
-    return String(value)
-  }
+    return String(value);
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', backgroundColor: 'rgba(0,0,0,0.6)' }}
-      onClick={onClose}
+      style={{
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        backgroundColor: "rgba(0,0,0,0.6)",
+      }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div
-        className="custom-scrollbar bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
-      >
-
+      <div className="custom-scrollbar bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#2a2d3e]">
           <div>
@@ -212,7 +227,6 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-1">
-
           {/* Custom fields */}
           {sortedFields.map((field) => (
             <div
@@ -235,10 +249,18 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
               System Fields
             </p>
             {[
-              { label: 'Created By', value: row.user?.name ?? '—' },
-              { label: 'Created At', value: new Date(row.createdAt).toLocaleString() },
-              { label: 'Updated By', value: row.updatedByUser?.name ?? '—' },
-              { label: 'Updated At', value: row.updatedBy ? new Date(row.updatedAt).toLocaleString() : '—' },
+              { label: "Created By", value: row.user?.name ?? "—" },
+              {
+                label: "Created At",
+                value: new Date(row.createdAt).toLocaleString(),
+              },
+              { label: "Updated By", value: row.updatedByUser?.name ?? "—" },
+              {
+                label: "Updated At",
+                value: row.updatedBy
+                  ? new Date(row.updatedAt).toLocaleString()
+                  : "—",
+              },
             ].map((item) => (
               <div
                 key={item.label}
@@ -262,29 +284,77 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
             <div className="flex justify-center">
               <div
                 style={{
-                  width: '200px',
-                  border: '5px solid #1a1a1a',
-                  borderRadius: '8px',
-                  overflow: 'hidden',
-                  background: 'white',
+                  width: "200px",
+                  border: "5px solid #1a1a1a",
+                  borderRadius: "8px",
+                  overflow: "hidden",
+                  background: "white",
                 }}
               >
                 {/* Header */}
-                <div style={{ background: '#1a1a1a', color: 'white', textAlign: 'center', padding: '10px 8px' }}>
-                  <p style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '2px' }}>Please do not remove.</p>
-                  <p style={{ fontSize: '12px', fontWeight: 'bold' }}>GTO Property</p>
+                <div
+                  style={{
+                    background: "#1a1a1a",
+                    color: "white",
+                    textAlign: "center",
+                    padding: "10px 8px",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: "bold",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    Please do not remove.
+                  </p>
+                  <p style={{ fontSize: "12px", fontWeight: "bold" }}>
+                    GTO Property
+                  </p>
                 </div>
                 {/* QR */}
-                <div style={{ background: 'white', padding: '10px', display: 'flex', justifyContent: 'center' }}>
+                <div
+                  style={{
+                    background: "white",
+                    padding: "10px",
+                    display: "flex",
+                    justifyContent: "center",
+                  }}
+                >
                   {qrDataUrl ? (
-                    <img src={qrDataUrl} alt="QR Code" style={{ width: '150px', height: '150px' }} />
+                    <img
+                      src={qrDataUrl}
+                      alt="QR Code"
+                      style={{ width: "150px", height: "150px" }}
+                    />
                   ) : (
-                    <div style={{ width: '150px', height: '150px', background: '#f3f4f6', borderRadius: '4px' }} />
+                    <div
+                      style={{
+                        width: "150px",
+                        height: "150px",
+                        background: "#f3f4f6",
+                        borderRadius: "4px",
+                      }}
+                    />
                   )}
                 </div>
                 {/* Footer */}
-                <div style={{ background: '#1a1a1a', color: 'white', textAlign: 'center', padding: '10px 8px' }}>
-                  <p style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                <div
+                  style={{
+                    background: "#1a1a1a",
+                    color: "white",
+                    textAlign: "center",
+                    padding: "10px 8px",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: "bold",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
                     ({bottomLabel})
                   </p>
                 </div>
@@ -312,5 +382,5 @@ export default function RowDetailModal({ row, fields, tableName, onClose }: Prop
         </div>
       </div>
     </div>
-  )
+  );
 }

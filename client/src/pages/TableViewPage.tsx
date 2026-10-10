@@ -126,7 +126,13 @@ export default function TableViewPage() {
     try {
       const [tableRes, rowsRes] = await Promise.all([
         tablesApi.getOne(id),
-        rowsApi.getAll(id, page, LIMIT),
+        rowsApi.getAll(
+          id,
+          page,
+          50,
+          sortField ?? undefined,
+          sortField ? sortDirection : undefined,
+        ),
       ]);
       const fetchedTable = tableRes.data.data;
       setTable(fetchedTable);
@@ -178,7 +184,7 @@ export default function TableViewPage() {
 
   useEffect(() => {
     fetchData();
-  }, [id, page]);
+  }, [id, page, sortField, sortDirection]);
 
   // ─── Toggle column visibility ─────────────────────────────────────────────
   const toggleColumn = (key: string) => {
@@ -269,23 +275,30 @@ export default function TableViewPage() {
   const filteredRows = rows.filter((row) => {
     if (!filterQuery.trim()) return true;
     const q = filterQuery.toLowerCase();
-    const dataMatch = Object.values(row.data).some((val) =>
-      String(val).toLowerCase().includes(q),
+    return (
+      Object.values(row.data).some((val) =>
+        String(val).toLowerCase().includes(q),
+      ) ||
+      (row.user?.name?.toLowerCase().includes(q) ?? false) ||
+      (row.updatedByUser?.name?.toLowerCase().includes(q) ?? false)
     );
-    const createdByMatch = row.user?.name?.toLowerCase().includes(q) ?? false;
-    const updatedByMatch =
-      row.updatedByUser?.name?.toLowerCase().includes(q) ?? false;
-    return dataMatch || createdByMatch || updatedByMatch;
   });
 
   // ─── Sort handling ────────────────────────────────────────────────────────
-  const handleSort = (fieldKey: string) => {
-    if (sortField === fieldKey) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+  const handleSort = (fieldName: string) => {
+    if (sortField !== fieldName) {
+      // First click on new column — ascending
+      setSortField(fieldName);
+      setSortDirection("asc");
+    } else if (sortDirection === "asc") {
+      // Second click — descending
+      setSortDirection("desc");
     } else {
-      setSortField(fieldKey);
+      // Third click — reset to default
+      setSortField(null);
       setSortDirection("asc");
     }
+    setPage(1);
   };
 
   const getSortValue = (row: Row, fieldKey: string) => {
@@ -458,7 +471,7 @@ export default function TableViewPage() {
             />
             {dupWarning && (
               <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
-                 {dupWarning}
+                {dupWarning}
               </p>
             )}
           </div>
@@ -667,24 +680,30 @@ export default function TableViewPage() {
                   .map((field, idx) => (
                     <th
                       key={field.id}
-                      className={`text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap ${
+                      onClick={() => handleSort(field.fieldName)}
+                      className={`text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none ${
                         idx === 0
-                          ? "sticky left-0 z-40 bg-gray-50 dark:bg-[#0f1117]"
+                          ? "sticky left-0 z-40 bg-gray-50 dark:bg-[#0f1117] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
                           : ""
                       }`}
                     >
-                      <button
-                        onClick={() => handleSort(field.fieldName)}
-                        className="flex items-center gap-1.5 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                      >
-                        <span>{field.fieldName}</span>
+                      <div className="flex items-center gap-1.5">
+                        {field.fieldName}
                         {field.isStockField && (
                           <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full normal-case font-medium">
                             stock
                           </span>
                         )}
-                        <SortIcon fieldKey={field.fieldName} />
-                      </button>
+                        {sortField === field.fieldName ? (
+                          <span className="text-indigo-500 text-xs">
+                            {sortDirection === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300 dark:text-gray-700 text-xs">
+                            ↕
+                          </span>
+                        )}
+                      </div>
                     </th>
                   ))}
                 {AUTO_FIELDS.filter((f) => visibleColumns[f.key]).map(

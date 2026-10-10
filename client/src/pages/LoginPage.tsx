@@ -121,7 +121,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={handleEmailChange}
                   className="w-full px-4 py-2.5 border border-gray-200 dark:border-[#2a2d3e] rounded-lg text-sm bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:placeholder-gray-600"
-                  placeholder="admin@inventory.com"
+                  placeholder="Enter your email"
                   required
                   autoComplete="email"
                 />
@@ -136,7 +136,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={handlePasswordChange}
                   className="w-full px-4 py-2.5 border border-gray-200 dark:border-[#2a2d3e] rounded-lg text-sm bg-gray-50 dark:bg-[#0f1117] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:placeholder-gray-600"
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                   required
                   autoComplete="current-password"
                 />

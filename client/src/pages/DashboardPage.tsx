@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Star,
   TrendingDown,
+  Table2,
 } from "lucide-react";
 import {
   DndContext,
@@ -58,131 +59,43 @@ function AnimatedNumber({ value }: { value: number }) {
   return <span className="tabular-nums">{count}</span>;
 }
 
-type Growth = { direction: "up" | "down" | "flat"; value: number };
+function StatTile({
+  table,
+  index,
+  highlight,
+}: {
+  table: TableSummary;
+  index: number;
+  highlight?: boolean;
+}) {
+  const count = useCountUp(table.rowCount);
+  const color = PIE_COLORS[index % PIE_COLORS.length];
 
-function TileTrendPill({ direction, value }: Growth) {
-  const isUp = direction === "up";
-  const isFlat = direction === "flat";
   return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${
-        isFlat
-          ? "bg-gray-100 dark:bg-gray-800 text-gray-400"
-          : isUp
-            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-            : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+    <div
+      className={`rounded-xl shadow-sm p-4 sm:p-5 border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${
+        highlight
+          ? "border-transparent"
+          : "bg-white dark:bg-[#1a1d2e] border-gray-100 dark:border-[#2a2d3e]"
       }`}
+      style={highlight ? { backgroundColor: color } : undefined}
     >
-      {isFlat ? (
-        "—"
-      ) : isUp ? (
-        <TrendingUp className="w-3 h-3" />
-      ) : (
-        <TrendingDown className="w-3 h-3" />
-      )}{" "}
-      {value}%
-    </span>
-  );
-}
-
-function FeaturedTile({
-  table,
-  growth,
-  addedThisMonth,
-  trend,
-}: {
-  table: TableSummary;
-  growth: Growth;
-  addedThisMonth: number;
-  trend: { month: string; count: number }[];
-}) {
-  const count = useCountUp(table.rowCount);
-  return (
-    <div className="h-full bg-white dark:bg-[#1a1d2e] rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-[#2a2d3e] hover:shadow-md transition-shadow duration-200 flex flex-col">
-      <div>
-        <p className="text-4xl sm:text-2xl text-gray-500 dark:text-gray-400 font-medium truncate mb-2">
+      <div className="flex flex-col items-center justify-between">
+        <p
+          className={`text-2xl sm:text-5xl text-center font-bold tabular-nums ${
+            highlight ? "text-white" : "text-gray-900 dark:text-white"
+          }`}
+        >
+          {count} <span className="text-xs">Records</span>
+        </p>
+        <p
+          className={`text-xs sm:text-2xl font-medium truncate ${
+            highlight ? "text-white/80" : "text-gray-500 dark:text-gray-400"
+          }`}
+        >
           {table.name}
         </p>
-        <p className="text-5xl sm:text-6xl font-bold text-gray-900 dark:text-white tabular-nums">
-          {count}
-        </p>
-        <div className="mt-2.5 flex items-center gap-1.5">
-          <TileTrendPill direction={growth.direction} value={growth.value} />
-          <span className="text-xs text-gray-400">
-            {addedThisMonth} added this month
-          </span>
-        </div>
       </div>
-
-      <div className="flex-1 mt-4 min-h-[110px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={trend}
-            margin={{ top: 5, right: 0, left: 0, bottom: 0 }}
-          >
-            <defs>
-              <linearGradient
-                id={`grad-${table.id}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis
-              dataKey="month"
-              tick={{ fontSize: 10, fill: "#8892a4" }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis hide allowDecimals={false} />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#1a1d2e",
-                border: "1px solid #2a2d3e",
-                borderRadius: "8px",
-                color: "#e2e8f0",
-                fontSize: "12px",
-              }}
-              formatter={(v: number) => [`${v} records`, "Added"]}
-            />
-            <Area
-              type="monotone"
-              dataKey="count"
-              stroke="#6366f1"
-              strokeWidth={2}
-              fill={`url(#grad-${table.id})`}
-              dot={{ fill: "#6366f1", r: 3 }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function CompactTile({
-  table,
-  growth,
-}: {
-  table: TableSummary;
-  growth: Growth;
-}) {
-  const count = useCountUp(table.rowCount);
-  return (
-    <div className="bg-white dark:bg-[#1a1d2e] rounded-xl shadow-sm p-4 border border-gray-100 dark:border-[#2a2d3e] flex items-center justify-between hover:shadow-md transition-shadow duration-200">
-      <div className="min-w-0">
-        <p className="text-xl text-gray-500 dark:text-gray-400 font-medium mb-1 truncate">
-          {table.name}
-        </p>
-        <p className="text-4xl font-bold text-gray-900 dark:text-white tabular-nums">
-          {count}
-        </p>
-      </div>
-      <TileTrendPill direction={growth.direction} value={growth.value} />
     </div>
   );
 }
@@ -348,7 +261,7 @@ export default function DashboardPage() {
         if (draftFeaturedId === tableId) setDraftFeaturedId(null);
         return prev.filter((id) => id !== tableId);
       }
-      if (prev.length >= 7) return prev; // max 7
+      if (prev.length >= 4) return prev; // max 4
       return [...prev, tableId];
     });
   };
@@ -360,67 +273,6 @@ export default function DashboardPage() {
     localStorage.setItem(tileStorageKey, JSON.stringify(draftTiles));
     if (nextFeatured) localStorage.setItem(featuredStorageKey, nextFeatured);
     setShowTilePicker(false);
-  };
-
-  const getTableGrowth = (tableName: string): Growth => {
-    const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-    const thisMonthAdds = (data?.recentActivity ?? []).filter(
-      (a) =>
-        a.tableName === tableName &&
-        a.action === "created" &&
-        new Date(a.timestamp) >= thisMonthStart,
-    ).length;
-
-    const lastMonthAdds = (data?.recentActivity ?? []).filter(
-      (a) =>
-        a.tableName === tableName &&
-        a.action === "created" &&
-        new Date(a.timestamp) >= lastMonthStart &&
-        new Date(a.timestamp) < thisMonthStart,
-    ).length;
-
-    if (lastMonthAdds === 0 && thisMonthAdds === 0)
-      return { direction: "flat", value: 0 };
-    if (lastMonthAdds === 0) return { direction: "up", value: 100 };
-    const pct = Math.round(
-      ((thisMonthAdds - lastMonthAdds) / lastMonthAdds) * 100,
-    );
-    return { direction: pct >= 0 ? "up" : "down", value: Math.abs(pct) };
-  };
-
-  const getThisMonthAdds = (tableName: string) => {
-    const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    return (data?.recentActivity ?? []).filter(
-      (a) =>
-        a.tableName === tableName &&
-        a.action === "created" &&
-        new Date(a.timestamp) >= thisMonthStart,
-    ).length;
-  };
-
-  const getTableMonthlyTrend = (tableName: string, months = 6) => {
-    const now = new Date();
-    const result: { month: string; count: number }[] = [];
-    for (let i = months - 1; i >= 0; i--) {
-      const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-      const count = (data?.recentActivity ?? []).filter(
-        (a) =>
-          a.tableName === tableName &&
-          a.action === "created" &&
-          new Date(a.timestamp) >= start &&
-          new Date(a.timestamp) < end,
-      ).length;
-      result.push({
-        month: start.toLocaleDateString("en-US", { month: "short" }),
-        count,
-      });
-    }
-    return result;
   };
 
   // ────── Pie Chart  ─────────────────────────────────────────────────────────────────────
@@ -505,12 +357,12 @@ export default function DashboardPage() {
                 : dashboard.tablesSummary.slice(0, 7).map((t: any) => t.id);
           } catch {
             validTiles = dashboard.tablesSummary
-              .slice(0, 7)
+              .slice(0, 4)
               .map((t: any) => t.id);
           }
         } else {
           validTiles = dashboard.tablesSummary
-            .slice(0, 7)
+            .slice(0, 4)
             .map((t: any) => t.id);
         }
         setSelectedTiles(validTiles);
@@ -582,13 +434,6 @@ export default function DashboardPage() {
   const renderWidget = (id: WidgetId) => {
     switch (id) {
       case "asset_tags": {
-        const featuredTile =
-          tilesTableData.find((t) => t.id === featuredTileId) ??
-          tilesTableData[0];
-        const compactTiles = tilesTableData.filter(
-          (t) => t.id !== featuredTile?.id,
-        );
-
         return (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -607,38 +452,19 @@ export default function DashboardPage() {
             {tilesTableData.length === 0 ? (
               <div className="bg-white dark:bg-[#1a1d2e] rounded-xl border border-gray-100 dark:border-[#2a2d3e] p-6 text-center">
                 <p className="text-sm text-gray-400">
-                  No tables selected. Click Customize to pick up to 7.
+                  No tables selected. Click Customize to pick up to 4.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-                {featuredTile && (
-                  <div className="hidden lg:block">
-                    <FeaturedTile
-                      table={featuredTile}
-                      growth={getTableGrowth(featuredTile.name)}
-                      addedThisMonth={getThisMonthAdds(featuredTile.name)}
-                      trend={getTableMonthlyTrend(featuredTile.name)}
-                    />
-                  </div>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {featuredTile && (
-                    <div className="lg:hidden">
-                      <CompactTile
-                        table={featuredTile}
-                        growth={getTableGrowth(featuredTile.name)}
-                      />
-                    </div>
-                  )}
-                  {compactTiles.map((table) => (
-                    <CompactTile
-                      key={table.id}
-                      table={table}
-                      growth={getTableGrowth(table.name)}
-                    />
-                  ))}
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                {tilesTableData.map((table, index) => (
+                  <StatTile
+                    key={table.id}
+                    table={table}
+                    index={index}
+                    highlight={table.id === featuredTileId}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -1502,7 +1328,7 @@ export default function DashboardPage() {
                   Customize Tiles
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Pick up to 7 tables ({draftTiles.length}/7) · tap the star to
+                  Pick up to 4 tables ({draftTiles.length}/4) · tap the star to
                   feature one
                 </p>
               </div>
@@ -1517,7 +1343,7 @@ export default function DashboardPage() {
             <div className="p-2 max-h-80 overflow-y-auto">
               {data?.tablesSummary.map((table) => {
                 const isSelected = draftTiles.includes(table.id);
-                const isDisabled = !isSelected && draftTiles.length >= 7;
+                const isDisabled = !isSelected && draftTiles.length >= 4;
                 const isFeatured = draftFeaturedId === table.id;
                 return (
                   <div
